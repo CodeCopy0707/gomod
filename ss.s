@@ -1,2372 +1,2285 @@
+
+
 #!/usr/bin/env python3
 """
-Advanced AI Coding Agent - Sophisticated AI Assistant with Multi-Modal Capabilities
+Augment Agent Replica - A comprehensive single-file implementation
+Developed by Augment Code
 
-This agent implements advanced architectural patterns similar to Claude's system:
-- Multi-modal AI capabilities with context awareness
-- Advanced reasoning and planning systems
-- Real-time analysis and adaptive response generation
-- Comprehensive tool integration and execution
-- Intelligent workflow management and error handling
+A complete replica of Augment Agent with all core capabilities:
+- File operations and code analysis
+- Web search and content fetching
+- Process management and terminal integration
+- Task management and memory system
+- Diagnostic tools and package management
+- Google Gemini 2.0 Flash integration
 
-Author: AI Coding Agent Team
-Version: 2.0.0
-License: MIT
+Requirements:
+    pip install google-generativeai requests beautifulsoup4 psutil
+
+Setup:
+    export GEMINI_API_KEY="your_gemini_api_key"
+    export GOOGLE_SEARCH_API_KEY="your_google_search_api_key" (optional)
+    export GOOGLE_SEARCH_ENGINE_ID="your_search_engine_id" (optional)
+
+Usage:
+    python augment_agent_replica.py
 """
 
 import os
 import sys
 import json
-import asyncio
-import logging
-import traceback
-import threading
-import queue
+import uuid
 import time
-import hashlib
-import pickle
-import sqlite3
-from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional, Union, Callable, Tuple, Set
-from dataclasses import dataclass, field, asdict
-from abc import ABC, abstractmethod
-from enum import Enum
+import subprocess
+import threading
+import re
+import shutil
+import webbrowser
 from pathlib import Path
-import concurrent.futures
-from contextlib import contextmanager
-import weakref
-import gc
+from typing import Dict, List, Optional, Any, Union
+from dataclasses import dataclass, asdict
+from datetime import datetime
+import logging
 
-# Auto-install required packages
-REQUIRED_PACKAGES = [
-    "google-generativeai>=0.8.0",
-    "openai>=1.0.0",
-    "anthropic>=0.8.0",
-    "tiktoken>=0.5.0",
-    "rich>=13.0.0",
-    "textual>=0.50.0",
-    "requests>=2.31.0",
-    "beautifulsoup4>=4.12.0",
-    "gitpython>=3.1.40",
-    "aiohttp>=3.9.0",
-    "python-dotenv>=1.0.0",
-    "click>=8.1.0",
-    "pydantic>=2.5.0",
-    "jinja2>=3.1.0",
-    "watchdog>=3.0.0",
-    "psutil>=5.9.0",
-    "numpy>=1.24.0",
-    "pandas>=2.0.0",
-    "scikit-learn>=1.3.0",
-    "networkx>=3.0",
-    "tree-sitter>=0.20.0",
-    "tree-sitter-python>=0.20.0",
-    "tree-sitter-javascript>=0.20.0",
-    "ast-comments>=1.0.0",
-    "rope>=1.10.0",
-    "black>=23.0.0",
-    "isort>=5.12.0",
-    "mypy>=1.5.0",
-    "pylint>=2.17.0",
-    "bandit>=1.7.0",
-    "safety>=2.3.0"
-]
-
-def install_package(package: str) -> bool:
-    """Install a package if not available"""
-    try:
-        module_name = package.split('>=')[0].replace('-', '_')
-        if module_name == 'tree_sitter_python':
-            import tree_sitter_python
-        elif module_name == 'tree_sitter_javascript':
-            import tree_sitter_javascript
-        else:
-            __import__(module_name)
-        return True
-    except ImportError:
-        try:
-            import subprocess
-            print(f"Installing {package}...")
-            subprocess.check_call([sys.executable, "-m", "pip", "install", package])
-            return True
-        except Exception as e:
-            print(f"Failed to install {package}: {e}")
-            return False
-
-# Install packages
-for package in REQUIRED_PACKAGES:
-    install_package(package)
-
-# Import all required modules
-import google.generativeai as genai
-import tiktoken
-import requests
-from rich.console import Console
-from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
-from rich.table import Table
-from rich.tree import Tree
-from rich.syntax import Syntax
-from rich.markdown import Markdown
-from rich.live import Live
-import git
-import numpy as np
-import pandas as pd
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-import networkx as nx
-import tree_sitter
-from tree_sitter import Language, Parser
-import ast
-import rope.base.project
-from rope.base.libutils import path_to_resource
-from rope.refactor.rename import Rename
-from rope.refactor.extract import ExtractMethod
-import black
-import isort
-from dotenv import load_dotenv
-from pydantic import BaseModel, Field, validator
-from jinja2 import Template, Environment, FileSystemLoader
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
-import psutil
-import aiohttp
-from bs4 import BeautifulSoup
-
-# Load environment variables
-load_dotenv()
+# Third-party imports
+try:
+    import google.generativeai as genai
+    import requests
+    from bs4 import BeautifulSoup
+    import psutil
+    import base64
+    import hashlib
+    import ast
+    import tokenize
+    from io import StringIO
+except ImportError as e:
+    print(f"Missing required dependency: {e}")
+    print("Please install with: pip install google-generativeai requests beautifulsoup4 psutil")
+    sys.exit(1)
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('ai_agent.log'),
-        logging.StreamHandler()
-    ]
-)
-
-console = Console()
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-
-class AgentCapability(Enum):
-    """Agent capability types"""
-    CODE_ANALYSIS = "code_analysis"
-    CODE_GENERATION = "code_generation"
-    REFACTORING = "refactoring"
-    TESTING = "testing"
-    DOCUMENTATION = "documentation"
-    DEBUGGING = "debugging"
-    OPTIMIZATION = "optimization"
-    SECURITY_ANALYSIS = "security_analysis"
-    ARCHITECTURE_DESIGN = "architecture_design"
-    PROJECT_MANAGEMENT = "project_management"
-    WEB_INTEGRATION = "web_integration"
-    GIT_OPERATIONS = "git_operations"
-    DATABASE_OPERATIONS = "database_operations"
-    API_INTEGRATION = "api_integration"
-    DEPLOYMENT = "deployment"
-
-class TaskPriority(Enum):
-    """Task priority levels"""
-    CRITICAL = 1
-    HIGH = 2
-    MEDIUM = 3
-    LOW = 4
-    BACKGROUND = 5
-
-class TaskStatus(Enum):
-    """Task status types"""
-    PENDING = "pending"
-    ANALYZING = "analyzing"
-    PLANNING = "planning"
-    EXECUTING = "executing"
-    VALIDATING = "validating"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    CANCELLED = "cancelled"
-    BLOCKED = "blocked"
-
-class ContextType(Enum):
-    """Context types for multi-modal understanding"""
-    CODE = "code"
-    DOCUMENTATION = "documentation"
-    ERROR = "error"
-    REQUIREMENT = "requirement"
-    CONVERSATION = "conversation"
-    FILE_SYSTEM = "file_system"
-    GIT_HISTORY = "git_history"
-    WEB_CONTENT = "web_content"
-    DATABASE_SCHEMA = "database_schema"
-
-@dataclass
-class AgentConfig:
-    """Comprehensive agent configuration"""
-    # AI Model Configuration
-    primary_model: str = "gemini-2.0-flash-exp"
-    fallback_models: List[str] = field(default_factory=lambda: ["gpt-4", "claude-3-sonnet"])
-    api_keys: Dict[str, str] = field(default_factory=dict)
-    
-    # Workspace Configuration
-    workspace_dir: str = "."
-    project_name: str = ""
-    
-    # Capability Configuration
-    enabled_capabilities: Set[AgentCapability] = field(default_factory=lambda: set(AgentCapability))
-    max_concurrent_tasks: int = 5
-    max_context_length: int = 1000000
-    
-    # Performance Configuration
-    enable_caching: bool = True
-    cache_ttl: int = 3600  # seconds
-    enable_parallel_processing: bool = True
-    memory_limit_mb: int = 2048
-    
-    # Behavior Configuration
-    auto_save: bool = True
-    auto_commit: bool = False
-    auto_test: bool = True
-    auto_format: bool = True
-    auto_document: bool = True
-    
-    # Learning Configuration
-    enable_learning: bool = True
-    context_retention_days: int = 30
-    feedback_learning: bool = True
-    
-    # Security Configuration
-    enable_security_checks: bool = True
-    allow_external_requests: bool = True
-    sandbox_mode: bool = False
-    
-    # UI Configuration
-    theme: str = "dark"
-    verbose_output: bool = True
-    show_progress: bool = True
-    
-    # Advanced Configuration
-    plugin_directories: List[str] = field(default_factory=list)
-    custom_prompts: Dict[str, str] = field(default_factory=dict)
-    integration_configs: Dict[str, Dict] = field(default_factory=dict)
-
-@dataclass
-class ContextItem:
-    """Individual context item with metadata"""
-    id: str
-    type: ContextType
-    content: str
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    timestamp: datetime = field(default_factory=datetime.now)
-    relevance_score: float = 0.0
-    embedding: Optional[np.ndarray] = None
-    relationships: List[str] = field(default_factory=list)
-    
-    def __post_init__(self):
-        if not self.id:
-            self.id = hashlib.md5(f"{self.type.value}_{self.content}_{self.timestamp}".encode()).hexdigest()
 
 @dataclass
 class Task:
-    """Advanced task with comprehensive metadata"""
+    """Task management data structure"""
     id: str
-    title: str
+    name: str
     description: str
-    status: TaskStatus = TaskStatus.PENDING
-    priority: TaskPriority = TaskPriority.MEDIUM
-    
-    # Task Hierarchy
+    state: str  # NOT_STARTED, IN_PROGRESS, COMPLETE, CANCELLED
     parent_id: Optional[str] = None
-    subtasks: List[str] = field(default_factory=list)
-    dependencies: List[str] = field(default_factory=list)
-    
-    # Execution Metadata
-    required_capabilities: Set[AgentCapability] = field(default_factory=set)
-    estimated_duration: Optional[timedelta] = None
-    actual_duration: Optional[timedelta] = None
-    progress: float = 0.0
-    
-    # Context and Results
-    context_items: List[str] = field(default_factory=list)
-    execution_plan: List[Dict[str, Any]] = field(default_factory=list)
-    results: Dict[str, Any] = field(default_factory=dict)
-    artifacts: List[str] = field(default_factory=list)
-    
-    # Timestamps
-    created_at: datetime = field(default_factory=datetime.now)
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    
-    # Error Handling
-    error_count: int = 0
-    max_retries: int = 3
-    error_messages: List[str] = field(default_factory=list)
-    
-    # Learning and Feedback
-    feedback_score: Optional[float] = None
-    lessons_learned: List[str] = field(default_factory=list)
+    created_at: str = ""
     
     def __post_init__(self):
-        if not self.id:
-            self.id = f"task_{int(time.time() * 1000)}_{hash(self.title) % 10000}"
+        if not self.created_at:
+            self.created_at = datetime.now().isoformat()
 
-class ContextManager:
-    """Advanced context management with multi-modal understanding"""
+@dataclass
+class Memory:
+    """Memory storage data structure"""
+    id: str
+    content: str
+    created_at: str
+    tags: List[str] = None
     
-    def __init__(self, config: AgentConfig):
-        self.config = config
-        self.contexts: Dict[str, ContextItem] = {}
-        self.context_graph = nx.DiGraph()
-        self.embeddings_cache: Dict[str, np.ndarray] = {}
-        self.vectorizer = TfidfVectorizer(max_features=1000, stop_words='english')
-        self.context_db = self._init_context_db()
-        
-        # Context retention and cleanup
-        self.cleanup_thread = threading.Thread(target=self._cleanup_old_contexts, daemon=True)
-        self.cleanup_thread.start()
+    def __post_init__(self):
+        if self.tags is None:
+            self.tags = []
+
+class ProcessManager:
+    """Manages system processes and terminal interactions"""
     
-    def _init_context_db(self) -> sqlite3.Connection:
-        """Initialize context database"""
-        db_path = os.path.join(self.config.workspace_dir, '.ai_agent_context.db')
-        conn = sqlite3.connect(db_path, check_same_thread=False)
-        
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS contexts (
-                id TEXT PRIMARY KEY,
-                type TEXT,
-                content TEXT,
-                metadata TEXT,
-                timestamp REAL,
-                relevance_score REAL,
-                embedding BLOB
-            )
-        ''')
-        
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS context_relationships (
-                source_id TEXT,
-                target_id TEXT,
-                relationship_type TEXT,
-                strength REAL,
-                PRIMARY KEY (source_id, target_id)
-            )
-        ''')
-        
-        conn.commit()
-        return conn
+    def __init__(self):
+        self.processes: Dict[int, subprocess.Popen] = {}
+        self.process_outputs: Dict[int, List[str]] = {}
+        self.next_terminal_id = 1
     
-    def add_context(self, context: ContextItem) -> str:
-        """Add context item with relationship analysis"""
-        # Generate embedding
-        if context.content and len(context.content.strip()) > 0:
-            context.embedding = self._generate_embedding(context.content)
-        
-        # Store in memory and database
-        self.contexts[context.id] = context
-        self._store_context_in_db(context)
-        
-        # Add to graph
-        self.context_graph.add_node(context.id, **asdict(context))
-        
-        # Analyze relationships with existing contexts
-        self._analyze_relationships(context)
-        
-        logger.info(f"Added context item: {context.id} ({context.type.value})")
-        return context.id
-    
-    def _generate_embedding(self, text: str) -> np.ndarray:
-        """Generate text embedding for similarity analysis"""
-        # Simple TF-IDF embedding (in production, use more sophisticated embeddings)
+    def launch_process(self, command: str, cwd: str, wait: bool = False, max_wait_seconds: int = 600) -> Dict[str, Any]:
+        """Launch a new process"""
         try:
-            if hasattr(self.vectorizer, 'vocabulary_'):
-                vector = self.vectorizer.transform([text])
+            terminal_id = self.next_terminal_id
+            self.next_terminal_id += 1
+            
+            if wait:
+                # Synchronous execution
+                result = subprocess.run(
+                    command, shell=True, cwd=cwd, capture_output=True, 
+                    text=True, timeout=max_wait_seconds
+                )
+                output = result.stdout + result.stderr
+                self.process_outputs[terminal_id] = [output]
+                return {
+                    "terminal_id": terminal_id,
+                    "output": output,
+                    "return_code": result.returncode,
+                    "completed": True
+                }
             else:
-                # Fit on current text if not fitted
-                vector = self.vectorizer.fit_transform([text])
-            return vector.toarray()[0]
+                # Asynchronous execution
+                process = subprocess.Popen(
+                    command, shell=True, cwd=cwd, 
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    text=True, bufsize=1, universal_newlines=True
+                )
+                self.processes[terminal_id] = process
+                self.process_outputs[terminal_id] = []
+                
+                # Start output capture thread
+                threading.Thread(
+                    target=self._capture_output, 
+                    args=(terminal_id, process), 
+                    daemon=True
+                ).start()
+                
+                return {
+                    "terminal_id": terminal_id,
+                    "output": f"Process started with terminal ID {terminal_id}",
+                    "return_code": None,
+                    "completed": False
+                }
         except Exception as e:
-            logger.warning(f"Failed to generate embedding: {e}")
-            return np.zeros(1000)
+            logger.error(f"Failed to launch process: {e}")
+            return {"error": str(e)}
     
-    def _analyze_relationships(self, new_context: ContextItem):
-        """Analyze relationships between contexts"""
-        if new_context.embedding is None:
-            return
-        
-        for existing_id, existing_context in self.contexts.items():
-            if existing_id == new_context.id or existing_context.embedding is None:
-                continue
-            
-            # Calculate similarity
-            similarity = cosine_similarity(
-                new_context.embedding.reshape(1, -1),
-                existing_context.embedding.reshape(1, -1)
-            )[0][0]
-            
-            # Create relationship if similarity is high enough
-            if similarity > 0.3:  # Threshold for relationship
-                self.context_graph.add_edge(
-                    new_context.id, 
-                    existing_id, 
-                    weight=similarity,
-                    type="semantic_similarity"
-                )
-                
-                # Store in database
-                self.context_db.execute('''
-                    INSERT OR REPLACE INTO context_relationships 
-                    (source_id, target_id, relationship_type, strength)
-                    VALUES (?, ?, ?, ?)
-                ''', (new_context.id, existing_id, "semantic_similarity", similarity))
-        
-        self.context_db.commit()
+    def _capture_output(self, terminal_id: int, process: subprocess.Popen):
+        """Capture process output in background thread"""
+        try:
+            for line in iter(process.stdout.readline, ''):
+                if line:
+                    self.process_outputs[terminal_id].append(line)
+        except Exception as e:
+            logger.error(f"Error capturing output for terminal {terminal_id}: {e}")
     
-    def get_relevant_contexts(self, query: str, context_types: List[ContextType] = None, 
-                            limit: int = 10) -> List[ContextItem]:
-        """Get relevant contexts for a query"""
-        query_embedding = self._generate_embedding(query)
+    def read_process(self, terminal_id: int, wait: bool = False, max_wait_seconds: int = 60) -> Dict[str, Any]:
+        """Read output from a process"""
+        if terminal_id not in self.process_outputs:
+            return {"error": f"Terminal {terminal_id} not found"}
         
-        relevant_contexts = []
-        for context in self.contexts.values():
-            if context_types and context.type not in context_types:
-                continue
-            
-            if context.embedding is not None:
-                similarity = cosine_similarity(
-                    query_embedding.reshape(1, -1),
-                    context.embedding.reshape(1, -1)
-                )[0][0]
-                
-                context.relevance_score = similarity
-                relevant_contexts.append(context)
-        
-        # Sort by relevance and return top results
-        relevant_contexts.sort(key=lambda x: x.relevance_score, reverse=True)
-        return relevant_contexts[:limit]
-    
-    def _store_context_in_db(self, context: ContextItem):
-        """Store context in database"""
-        embedding_blob = pickle.dumps(context.embedding) if context.embedding is not None else None
-        
-        self.context_db.execute('''
-            INSERT OR REPLACE INTO contexts 
-            (id, type, content, metadata, timestamp, relevance_score, embedding)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            context.id,
-            context.type.value,
-            context.content,
-            json.dumps(context.metadata),
-            context.timestamp.timestamp(),
-            context.relevance_score,
-            embedding_blob
-        ))
-        self.context_db.commit()
-    
-    def _cleanup_old_contexts(self):
-        """Cleanup old contexts based on retention policy"""
-        while True:
+        if wait and terminal_id in self.processes:
+            process = self.processes[terminal_id]
             try:
-                cutoff_time = datetime.now() - timedelta(days=self.config.context_retention_days)
-                
-                # Remove old contexts from memory
-                old_context_ids = [
-                    ctx_id for ctx_id, ctx in self.contexts.items()
-                    if ctx.timestamp < cutoff_time
-                ]
-                
-                for ctx_id in old_context_ids:
-                    del self.contexts[ctx_id]
-                    if self.context_graph.has_node(ctx_id):
-                        self.context_graph.remove_node(ctx_id)
-                
-                # Remove from database
-                self.context_db.execute(
-                    'DELETE FROM contexts WHERE timestamp < ?',
-                    (cutoff_time.timestamp(),)
-                )
-                self.context_db.execute(
-                    'DELETE FROM context_relationships WHERE source_id NOT IN (SELECT id FROM contexts)'
-                )
-                self.context_db.commit()
-                
-                if old_context_ids:
-                    logger.info(f"Cleaned up {len(old_context_ids)} old contexts")
-                
-                # Sleep for an hour before next cleanup
-                time.sleep(3600)
-                
-            except Exception as e:
-                logger.error(f"Error in context cleanup: {e}")
-                time.sleep(3600)
-    
-    def get_context_summary(self) -> Dict[str, Any]:
-        """Get summary of current context state"""
-        type_counts = {}
-        for context in self.contexts.values():
-            type_counts[context.type.value] = type_counts.get(context.type.value, 0) + 1
+                process.wait(timeout=max_wait_seconds)
+            except subprocess.TimeoutExpired:
+                pass
+        
+        output = ''.join(self.process_outputs[terminal_id])
+        completed = terminal_id not in self.processes or self.processes[terminal_id].poll() is not None
         
         return {
-            "total_contexts": len(self.contexts),
-            "type_distribution": type_counts,
-            "graph_nodes": self.context_graph.number_of_nodes(),
-            "graph_edges": self.context_graph.number_of_edges(),
-            "memory_usage_mb": sys.getsizeof(self.contexts) / (1024 * 1024)
+            "output": output,
+            "completed": completed,
+            "return_code": self.processes[terminal_id].poll() if terminal_id in self.processes else None
         }
-
-class ReasoningEngine:
-    """Advanced reasoning engine for intelligent task analysis and planning"""
-
-    def __init__(self, config: AgentConfig, context_manager: ContextManager):
-        self.config = config
-        self.context_manager = context_manager
-        self.reasoning_history: List[Dict[str, Any]] = []
-        self.pattern_library: Dict[str, Dict[str, Any]] = {}
-        self.decision_tree = nx.DiGraph()
-
-        # Initialize AI models
-        self.models = self._initialize_models()
-
-        # Load reasoning patterns
-        self._load_reasoning_patterns()
-
-    def _initialize_models(self) -> Dict[str, Any]:
-        """Initialize AI models for reasoning"""
-        models = {}
-
-        # Gemini
-        if self.config.api_keys.get('gemini'):
-            genai.configure(api_key=self.config.api_keys['gemini'])
-            models['gemini'] = genai.GenerativeModel(self.config.primary_model)
-
-        # OpenAI (if available)
-        if self.config.api_keys.get('openai'):
-            try:
-                import openai
-                openai.api_key = self.config.api_keys['openai']
-                models['openai'] = openai
-            except ImportError:
-                pass
-
-        # Anthropic (if available)
-        if self.config.api_keys.get('anthropic'):
-            try:
-                import anthropic
-                models['anthropic'] = anthropic.Anthropic(api_key=self.config.api_keys['anthropic'])
-            except ImportError:
-                pass
-
-        return models
-
-    def _load_reasoning_patterns(self):
-        """Load common reasoning patterns for different types of tasks"""
-        self.pattern_library = {
-            "code_analysis": {
-                "steps": [
-                    "Parse and understand code structure",
-                    "Identify patterns and anti-patterns",
-                    "Analyze dependencies and relationships",
-                    "Evaluate quality metrics",
-                    "Generate insights and recommendations"
-                ],
-                "context_types": [ContextType.CODE, ContextType.DOCUMENTATION],
-                "capabilities": [AgentCapability.CODE_ANALYSIS]
-            },
-            "feature_development": {
-                "steps": [
-                    "Understand requirements and constraints",
-                    "Design architecture and approach",
-                    "Plan implementation phases",
-                    "Identify testing strategy",
-                    "Consider deployment and maintenance"
-                ],
-                "context_types": [ContextType.REQUIREMENT, ContextType.CODE],
-                "capabilities": [
-                    AgentCapability.CODE_GENERATION,
-                    AgentCapability.TESTING,
-                    AgentCapability.DOCUMENTATION
-                ]
-            },
-            "debugging": {
-                "steps": [
-                    "Reproduce and understand the error",
-                    "Analyze error context and stack trace",
-                    "Identify potential root causes",
-                    "Develop and test hypotheses",
-                    "Implement and validate solution"
-                ],
-                "context_types": [ContextType.ERROR, ContextType.CODE],
-                "capabilities": [AgentCapability.DEBUGGING, AgentCapability.CODE_ANALYSIS]
-            },
-            "refactoring": {
-                "steps": [
-                    "Analyze current code structure",
-                    "Identify improvement opportunities",
-                    "Plan refactoring strategy",
-                    "Implement changes incrementally",
-                    "Validate functionality preservation"
-                ],
-                "context_types": [ContextType.CODE],
-                "capabilities": [AgentCapability.REFACTORING, AgentCapability.TESTING]
-            }
-        }
-
-    async def analyze_request(self, request: str, context_items: List[ContextItem] = None) -> Dict[str, Any]:
-        """Analyze a user request using advanced reasoning"""
-        logger.info(f"Analyzing request: {request[:100]}...")
-
-        # Get relevant context
-        if context_items is None:
-            context_items = self.context_manager.get_relevant_contexts(request)
-
-        # Prepare analysis prompt
-        analysis_prompt = self._build_analysis_prompt(request, context_items)
-
-        # Perform multi-model analysis
-        analysis_results = await self._multi_model_analysis(analysis_prompt)
-
-        # Synthesize results
-        final_analysis = self._synthesize_analysis(analysis_results)
-
-        # Store reasoning in history
-        self.reasoning_history.append({
-            "timestamp": datetime.now(),
-            "request": request,
-            "context_count": len(context_items),
-            "analysis": final_analysis
-        })
-
-        return final_analysis
-
-    def _build_analysis_prompt(self, request: str, context_items: List[ContextItem]) -> str:
-        """Build comprehensive analysis prompt"""
-        context_summary = self._summarize_context(context_items)
-
-        prompt = f"""
-Analyze this development request with deep reasoning and contextual understanding:
-
-REQUEST: {request}
-
-AVAILABLE CONTEXT:
-{context_summary}
-
-ANALYSIS FRAMEWORK:
-1. Intent Understanding:
-   - What is the user trying to accomplish?
-   - What are the explicit and implicit requirements?
-   - What constraints or preferences are indicated?
-
-2. Complexity Assessment:
-   - Technical complexity (1-10 scale)
-   - Time complexity (estimated hours)
-   - Risk factors and potential challenges
-   - Required expertise level
-
-3. Context Analysis:
-   - How does this relate to existing code/project?
-   - What dependencies or integrations are involved?
-   - What patterns or conventions should be followed?
-
-4. Approach Recommendation:
-   - Best methodology for this type of task
-   - Recommended tools and technologies
-   - Step-by-step approach outline
-   - Alternative approaches to consider
-
-5. Success Criteria:
-   - How to measure successful completion
-   - Testing and validation requirements
-   - Quality standards to maintain
-
-Provide analysis in structured JSON format with detailed reasoning for each aspect.
-"""
-        return prompt
-
-    def _summarize_context(self, context_items: List[ContextItem]) -> str:
-        """Summarize context items for prompt inclusion"""
-        if not context_items:
-            return "No specific context available."
-
-        summary_parts = []
-        context_by_type = {}
-
-        # Group by type
-        for item in context_items:
-            if item.type not in context_by_type:
-                context_by_type[item.type] = []
-            context_by_type[item.type].append(item)
-
-        # Summarize each type
-        for context_type, items in context_by_type.items():
-            summary_parts.append(f"\n{context_type.value.upper()}:")
-            for item in items[:3]:  # Limit to top 3 per type
-                content_preview = item.content[:200] + "..." if len(item.content) > 200 else item.content
-                summary_parts.append(f"  - {content_preview}")
-
-            if len(items) > 3:
-                summary_parts.append(f"  ... and {len(items) - 3} more items")
-
-        return "\n".join(summary_parts)
-
-    async def _multi_model_analysis(self, prompt: str) -> List[Dict[str, Any]]:
-        """Perform analysis using multiple AI models for robustness"""
-        results = []
-
-        # Primary model analysis
-        if 'gemini' in self.models:
-            try:
-                response = await self.models['gemini'].generate_content_async(prompt)
-                results.append({
-                    "model": "gemini",
-                    "response": response.text,
-                    "confidence": 0.9  # Primary model gets higher confidence
-                })
-            except Exception as e:
-                logger.warning(f"Gemini analysis failed: {e}")
-
-        # Fallback models if available
-        for model_name in self.config.fallback_models:
-            if model_name in self.models and len(results) < 2:  # Limit to 2 models for efficiency
-                try:
-                    if model_name == "openai":
-                        # OpenAI API call would go here
-                        pass
-                    elif model_name == "anthropic":
-                        # Anthropic API call would go here
-                        pass
-                except Exception as e:
-                    logger.warning(f"{model_name} analysis failed: {e}")
-
-        return results
-
-    def _synthesize_analysis(self, analysis_results: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Synthesize multiple analysis results into final analysis"""
-        if not analysis_results:
-            return self._default_analysis()
-
-        # For now, use the primary result
-        # In production, implement sophisticated synthesis logic
-        primary_result = analysis_results[0]
-
+    
+    def write_process(self, terminal_id: int, input_text: str) -> Dict[str, Any]:
+        """Write input to a process"""
+        if terminal_id not in self.processes:
+            return {"error": f"Terminal {terminal_id} not found"}
+        
         try:
-            # Try to parse JSON response
-            analysis = json.loads(primary_result["response"])
-        except json.JSONDecodeError:
-            # Fallback to structured parsing
-            analysis = self._parse_unstructured_analysis(primary_result["response"])
-
-        # Add metadata
-        analysis["reasoning_metadata"] = {
-            "models_used": [r["model"] for r in analysis_results],
-            "confidence_score": sum(r.get("confidence", 0.5) for r in analysis_results) / len(analysis_results),
-            "analysis_timestamp": datetime.now().isoformat()
-        }
-
-        return analysis
-
-    def _default_analysis(self) -> Dict[str, Any]:
-        """Provide default analysis when AI models are unavailable"""
-        return {
-            "intent": "General development task",
-            "complexity": {
-                "technical": 5,
-                "time_estimate_hours": 2,
-                "risk_level": "medium"
-            },
-            "approach": {
-                "methodology": "iterative_development",
-                "steps": [
-                    "Analyze requirements",
-                    "Design solution",
-                    "Implement incrementally",
-                    "Test and validate",
-                    "Document and deploy"
-                ]
-            },
-            "success_criteria": [
-                "Functional requirements met",
-                "Code quality standards maintained",
-                "Tests passing"
-            ],
-            "reasoning_metadata": {
-                "models_used": ["fallback"],
-                "confidence_score": 0.3,
-                "analysis_timestamp": datetime.now().isoformat()
-            }
-        }
-
-    def _parse_unstructured_analysis(self, text: str) -> Dict[str, Any]:
-        """Parse unstructured analysis text into structured format"""
-        # Simple parsing logic - in production, use more sophisticated NLP
-        analysis = {
-            "intent": "Extracted from unstructured response",
-            "complexity": {"technical": 5, "time_estimate_hours": 2},
-            "approach": {"methodology": "standard", "steps": []},
-            "success_criteria": [],
-            "raw_response": text
-        }
-
-        # Extract key information using simple patterns
-        lines = text.split('\n')
-        current_section = None
-
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-
-            # Identify sections
-            if any(keyword in line.lower() for keyword in ['intent', 'goal', 'objective']):
-                current_section = 'intent'
-                analysis['intent'] = line
-            elif any(keyword in line.lower() for keyword in ['complexity', 'difficulty']):
-                current_section = 'complexity'
-            elif any(keyword in line.lower() for keyword in ['approach', 'method', 'strategy']):
-                current_section = 'approach'
-                if 'steps' not in analysis['approach']:
-                    analysis['approach']['steps'] = []
-            elif any(keyword in line.lower() for keyword in ['success', 'criteria', 'completion']):
-                current_section = 'success_criteria'
-            elif current_section == 'approach' and line.startswith(('-', '*', '1.', '2.')):
-                analysis['approach']['steps'].append(line)
-            elif current_section == 'success_criteria' and line.startswith(('-', '*')):
-                analysis['success_criteria'].append(line)
-
-        return analysis
-
-class TaskPlanner:
-    """Advanced task planning and decomposition system"""
-
-    def __init__(self, config: AgentConfig, context_manager: ContextManager, reasoning_engine: ReasoningEngine):
-        self.config = config
-        self.context_manager = context_manager
-        self.reasoning_engine = reasoning_engine
-        self.task_graph = nx.DiGraph()
-        self.execution_queue = queue.PriorityQueue()
-        self.active_tasks: Dict[str, Task] = {}
-        self.completed_tasks: Dict[str, Task] = {}
-
-        # Planning strategies
-        self.planning_strategies = {
-            "waterfall": self._plan_waterfall,
-            "agile": self._plan_agile,
-            "iterative": self._plan_iterative,
-            "exploratory": self._plan_exploratory
-        }
-
-    async def create_execution_plan(self, request: str, analysis: Dict[str, Any]) -> List[Task]:
-        """Create comprehensive execution plan from analysis"""
-        logger.info("Creating execution plan...")
-
-        # Determine planning strategy
-        strategy = self._select_planning_strategy(analysis)
-
-        # Create main task
-        main_task = self._create_main_task(request, analysis)
-
-        # Decompose into subtasks using selected strategy
-        subtasks = await self.planning_strategies[strategy](main_task, analysis)
-
-        # Build task dependency graph
-        self._build_task_graph(main_task, subtasks)
-
-        # Optimize execution order
-        execution_order = self._optimize_execution_order(main_task, subtasks)
-
-        # Store tasks
-        all_tasks = [main_task] + subtasks
-        for task in all_tasks:
-            self.active_tasks[task.id] = task
-
-        logger.info(f"Created execution plan with {len(subtasks)} subtasks")
-        return execution_order
-
-    def _select_planning_strategy(self, analysis: Dict[str, Any]) -> str:
-        """Select appropriate planning strategy based on analysis"""
-        complexity = analysis.get("complexity", {})
-        technical_complexity = complexity.get("technical", 5)
-        risk_level = complexity.get("risk_level", "medium")
-
-        if technical_complexity >= 8 or risk_level == "high":
-            return "iterative"  # Break down complex tasks
-        elif "exploration" in analysis.get("intent", "").lower():
-            return "exploratory"  # For research/discovery tasks
-        elif analysis.get("approach", {}).get("methodology") == "agile":
-            return "agile"  # User preference or project methodology
-        else:
-            return "waterfall"  # Default structured approach
-
-    def _create_main_task(self, request: str, analysis: Dict[str, Any]) -> Task:
-        """Create main task from request and analysis"""
-        complexity = analysis.get("complexity", {})
-
-        task = Task(
-            title=f"Main: {request[:50]}...",
-            description=request,
-            priority=TaskPriority.HIGH,
-            estimated_duration=timedelta(hours=complexity.get("time_estimate_hours", 2)),
-            required_capabilities=self._extract_capabilities(analysis)
-        )
-
-        return task
-
-    def _extract_capabilities(self, analysis: Dict[str, Any]) -> Set[AgentCapability]:
-        """Extract required capabilities from analysis"""
-        capabilities = set()
-
-        # Analyze intent and approach to determine capabilities
-        intent = analysis.get("intent", "").lower()
-        approach = analysis.get("approach", {})
-
-        # Map keywords to capabilities
-        capability_keywords = {
-            AgentCapability.CODE_ANALYSIS: ["analyze", "review", "examine"],
-            AgentCapability.CODE_GENERATION: ["create", "implement", "build", "develop"],
-            AgentCapability.REFACTORING: ["refactor", "improve", "restructure"],
-            AgentCapability.TESTING: ["test", "validate", "verify"],
-            AgentCapability.DOCUMENTATION: ["document", "explain", "describe"],
-            AgentCapability.DEBUGGING: ["debug", "fix", "error", "bug"],
-            AgentCapability.SECURITY_ANALYSIS: ["security", "vulnerability", "secure"],
-            AgentCapability.OPTIMIZATION: ["optimize", "performance", "speed"],
-        }
-
-        for capability, keywords in capability_keywords.items():
-            if any(keyword in intent for keyword in keywords):
-                capabilities.add(capability)
-
-        # Default capabilities if none detected
-        if not capabilities:
-            capabilities.add(AgentCapability.CODE_GENERATION)
-
-        return capabilities
-
-    async def _plan_waterfall(self, main_task: Task, analysis: Dict[str, Any]) -> List[Task]:
-        """Waterfall planning strategy - sequential phases"""
-        subtasks = []
-        approach = analysis.get("approach", {})
-        steps = approach.get("steps", [])
-
-        for i, step in enumerate(steps):
-            subtask = Task(
-                title=f"Phase {i+1}: {step}",
-                description=step,
-                parent_id=main_task.id,
-                priority=TaskPriority.MEDIUM,
-                estimated_duration=timedelta(hours=main_task.estimated_duration.total_seconds() / 3600 / len(steps)),
-                required_capabilities=main_task.required_capabilities
-            )
-
-            # Add dependency on previous task
-            if i > 0:
-                subtask.dependencies.append(subtasks[i-1].id)
-
-            subtasks.append(subtask)
-            main_task.subtasks.append(subtask.id)
-
-        return subtasks
-
-    async def _plan_agile(self, main_task: Task, analysis: Dict[str, Any]) -> List[Task]:
-        """Agile planning strategy - iterative sprints"""
-        subtasks = []
-
-        # Create sprint-like iterations
-        sprint_tasks = [
-            "Sprint 1: Core functionality",
-            "Sprint 2: Feature enhancement",
-            "Sprint 3: Testing and refinement",
-            "Sprint 4: Documentation and deployment"
-        ]
-
-        for i, sprint_title in enumerate(sprint_tasks):
-            subtask = Task(
-                title=sprint_title,
-                description=f"Agile sprint focusing on incremental delivery",
-                parent_id=main_task.id,
-                priority=TaskPriority.MEDIUM,
-                estimated_duration=timedelta(hours=main_task.estimated_duration.total_seconds() / 3600 / len(sprint_tasks)),
-                required_capabilities=main_task.required_capabilities
-            )
-
-            subtasks.append(subtask)
-            main_task.subtasks.append(subtask.id)
-
-        return subtasks
-
-    async def _plan_iterative(self, main_task: Task, analysis: Dict[str, Any]) -> List[Task]:
-        """Iterative planning strategy - incremental development"""
-        subtasks = []
-
-        # Break down by capability areas
-        capability_tasks = {
-            AgentCapability.CODE_ANALYSIS: "Analyze existing code and requirements",
-            AgentCapability.CODE_GENERATION: "Implement core functionality",
-            AgentCapability.TESTING: "Create and run tests",
-            AgentCapability.DOCUMENTATION: "Generate documentation",
-            AgentCapability.OPTIMIZATION: "Optimize and refine"
-        }
-
-        for capability in main_task.required_capabilities:
-            if capability in capability_tasks:
-                subtask = Task(
-                    title=capability_tasks[capability],
-                    description=f"Task focused on {capability.value}",
-                    parent_id=main_task.id,
-                    priority=TaskPriority.MEDIUM,
-                    estimated_duration=timedelta(hours=1),
-                    required_capabilities={capability}
-                )
-
-                subtasks.append(subtask)
-                main_task.subtasks.append(subtask.id)
-
-        return subtasks
-
-    async def _plan_exploratory(self, main_task: Task, analysis: Dict[str, Any]) -> List[Task]:
-        """Exploratory planning strategy - research and discovery"""
-        subtasks = []
-
-        exploration_phases = [
-            "Research and discovery",
-            "Prototype development",
-            "Evaluation and analysis",
-            "Implementation planning"
-        ]
-
-        for phase in exploration_phases:
-            subtask = Task(
-                title=f"Exploration: {phase}",
-                description=f"Exploratory phase: {phase}",
-                parent_id=main_task.id,
-                priority=TaskPriority.MEDIUM,
-                estimated_duration=timedelta(hours=main_task.estimated_duration.total_seconds() / 3600 / len(exploration_phases)),
-                required_capabilities=main_task.required_capabilities
-            )
-
-            subtasks.append(subtask)
-            main_task.subtasks.append(subtask.id)
-
-        return subtasks
-
-    def _build_task_graph(self, main_task: Task, subtasks: List[Task]):
-        """Build task dependency graph"""
-        # Add main task
-        self.task_graph.add_node(main_task.id, task=main_task)
-
-        # Add subtasks and dependencies
-        for subtask in subtasks:
-            self.task_graph.add_node(subtask.id, task=subtask)
-
-            # Parent-child relationship
-            self.task_graph.add_edge(main_task.id, subtask.id, relationship="parent-child")
-
-            # Dependencies
-            for dep_id in subtask.dependencies:
-                if dep_id in [t.id for t in subtasks]:
-                    self.task_graph.add_edge(dep_id, subtask.id, relationship="dependency")
-
-    def _optimize_execution_order(self, main_task: Task, subtasks: List[Task]) -> List[Task]:
-        """Optimize task execution order using topological sorting"""
-        try:
-            # Get topological order of subtasks
-            subtask_ids = [t.id for t in subtasks]
-            subgraph = self.task_graph.subgraph(subtask_ids)
-
-            if nx.is_directed_acyclic_graph(subgraph):
-                ordered_ids = list(nx.topological_sort(subgraph))
-                ordered_tasks = [next(t for t in subtasks if t.id == tid) for tid in ordered_ids]
-            else:
-                # Fallback to priority-based ordering
-                ordered_tasks = sorted(subtasks, key=lambda t: t.priority.value)
-        except:
-            # Fallback to original order
-            ordered_tasks = subtasks
-
-        return [main_task] + ordered_tasks
-
-class ExecutionEngine:
-    """Advanced execution engine with parallel processing and error handling"""
-
-    def __init__(self, config: AgentConfig, context_manager: ContextManager,
-                 reasoning_engine: ReasoningEngine, task_planner: TaskPlanner):
-        self.config = config
-        self.context_manager = context_manager
-        self.reasoning_engine = reasoning_engine
-        self.task_planner = task_planner
-
-        # Execution state
-        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=config.max_concurrent_tasks)
-        self.running_tasks: Dict[str, concurrent.futures.Future] = {}
-        self.task_results: Dict[str, Dict[str, Any]] = {}
-
-        # Tool registry
-        self.tools: Dict[str, 'BaseTool'] = {}
-        self._register_core_tools()
-
-        # Execution monitoring
-        self.execution_metrics = {
-            "tasks_completed": 0,
-            "tasks_failed": 0,
-            "total_execution_time": 0,
-            "average_task_time": 0
-        }
-
-    def _register_core_tools(self):
-        """Register core tools for task execution"""
-        # Tools will be registered here
-        pass
-
-    async def execute_task_plan(self, tasks: List[Task]) -> Dict[str, Any]:
-        """Execute a complete task plan with monitoring and error handling"""
-        logger.info(f"Starting execution of {len(tasks)} tasks")
-
-        execution_start = datetime.now()
-        results = {
-            "execution_id": f"exec_{int(time.time())}",
-            "start_time": execution_start,
-            "tasks": {},
-            "overall_status": "running",
-            "progress": 0.0
-        }
-
-        try:
-            # Execute tasks in dependency order
-            for task in tasks:
-                if self._can_execute_task(task, results):
-                    task_result = await self._execute_single_task(task)
-                    results["tasks"][task.id] = task_result
-
-                    # Update progress
-                    completed_tasks = sum(1 for r in results["tasks"].values() if r["status"] == "completed")
-                    results["progress"] = completed_tasks / len(tasks)
-
-                    # Check for failures
-                    if task_result["status"] == "failed" and task.priority in [TaskPriority.CRITICAL, TaskPriority.HIGH]:
-                        logger.error(f"Critical task failed: {task.id}")
-                        results["overall_status"] = "failed"
-                        break
-
-            # Determine overall status
-            if results["overall_status"] != "failed":
-                failed_tasks = sum(1 for r in results["tasks"].values() if r["status"] == "failed")
-                if failed_tasks == 0:
-                    results["overall_status"] = "completed"
-                elif failed_tasks < len(tasks) * 0.5:  # Less than 50% failed
-                    results["overall_status"] = "partially_completed"
-                else:
-                    results["overall_status"] = "failed"
-
-            execution_end = datetime.now()
-            results["end_time"] = execution_end
-            results["total_duration"] = (execution_end - execution_start).total_seconds()
-
-            # Update metrics
-            self._update_execution_metrics(results)
-
-            logger.info(f"Execution completed with status: {results['overall_status']}")
-            return results
-
+            process = self.processes[terminal_id]
+            process.stdin.write(input_text + '\n')
+            process.stdin.flush()
+            return {"success": True}
         except Exception as e:
-            logger.error(f"Execution engine error: {e}")
-            results["overall_status"] = "error"
-            results["error"] = str(e)
-            return results
-
-    def _can_execute_task(self, task: Task, current_results: Dict[str, Any]) -> bool:
-        """Check if task dependencies are satisfied"""
-        for dep_id in task.dependencies:
-            if dep_id not in current_results["tasks"]:
-                return False
-            if current_results["tasks"][dep_id]["status"] != "completed":
-                return False
-        return True
-
-    async def _execute_single_task(self, task: Task) -> Dict[str, Any]:
-        """Execute a single task with comprehensive monitoring"""
-        logger.info(f"Executing task: {task.title}")
-
-        task_start = datetime.now()
-        task.status = TaskStatus.EXECUTING
-        task.started_at = task_start
-
-        result = {
-            "task_id": task.id,
-            "status": "running",
-            "start_time": task_start,
-            "progress": 0.0,
-            "outputs": [],
-            "artifacts": [],
-            "errors": []
-        }
-
+            return {"error": str(e)}
+    
+    def kill_process(self, terminal_id: int) -> Dict[str, Any]:
+        """Kill a process"""
+        if terminal_id not in self.processes:
+            return {"error": f"Terminal {terminal_id} not found"}
+        
         try:
-            # Get relevant context for task
-            context_items = self.context_manager.get_relevant_contexts(
-                task.description,
-                limit=10
-            )
-
-            # Execute based on required capabilities
-            for capability in task.required_capabilities:
-                capability_result = await self._execute_capability(task, capability, context_items)
-                result["outputs"].append(capability_result)
-
-                # Update progress
-                result["progress"] = len(result["outputs"]) / len(task.required_capabilities)
-
-            # Mark as completed
-            task.status = TaskStatus.COMPLETED
-            task.completed_at = datetime.now()
-            task.actual_duration = task.completed_at - task_start
-            result["status"] = "completed"
-            result["end_time"] = task.completed_at
-
-            # Store results in task
-            task.results = result
-
+            process = self.processes[terminal_id]
+            process.terminate()
+            process.wait(timeout=5)
+            del self.processes[terminal_id]
+            return {"success": True}
         except Exception as e:
-            logger.error(f"Task execution failed: {e}")
-            task.status = TaskStatus.FAILED
-            task.error_count += 1
-            task.error_messages.append(str(e))
-
-            result["status"] = "failed"
-            result["error"] = str(e)
-            result["end_time"] = datetime.now()
-
+            return {"error": str(e)}
+    
+    def list_processes(self) -> List[Dict[str, Any]]:
+        """List all managed processes"""
+        result = []
+        for terminal_id, process in self.processes.items():
+            result.append({
+                "terminal_id": terminal_id,
+                "pid": process.pid,
+                "running": process.poll() is None,
+                "return_code": process.poll()
+            })
         return result
 
-    async def _execute_capability(self, task: Task, capability: AgentCapability,
-                                context_items: List[ContextItem]) -> Dict[str, Any]:
-        """Execute a specific capability for a task"""
-        capability_handlers = {
-            AgentCapability.CODE_ANALYSIS: self._handle_code_analysis,
-            AgentCapability.CODE_GENERATION: self._handle_code_generation,
-            AgentCapability.TESTING: self._handle_testing,
-            AgentCapability.DOCUMENTATION: self._handle_documentation,
-            AgentCapability.DEBUGGING: self._handle_debugging,
-            AgentCapability.REFACTORING: self._handle_refactoring,
-        }
-
-        handler = capability_handlers.get(capability, self._handle_generic_capability)
-        return await handler(task, context_items)
-
-    async def _handle_code_analysis(self, task: Task, context_items: List[ContextItem]) -> Dict[str, Any]:
-        """Handle code analysis capability"""
-        return {
-            "capability": "code_analysis",
-            "result": "Code analysis completed",
-            "details": "Analyzed code structure and quality"
-        }
-
-    async def _handle_code_generation(self, task: Task, context_items: List[ContextItem]) -> Dict[str, Any]:
-        """Handle code generation capability"""
-        return {
-            "capability": "code_generation",
-            "result": "Code generated successfully",
-            "details": "Generated code based on requirements"
-        }
-
-    async def _handle_testing(self, task: Task, context_items: List[ContextItem]) -> Dict[str, Any]:
-        """Handle testing capability"""
-        return {
-            "capability": "testing",
-            "result": "Tests created and executed",
-            "details": "Comprehensive test suite generated"
-        }
-
-    async def _handle_documentation(self, task: Task, context_items: List[ContextItem]) -> Dict[str, Any]:
-        """Handle documentation capability"""
-        return {
-            "capability": "documentation",
-            "result": "Documentation generated",
-            "details": "Comprehensive documentation created"
-        }
-
-    async def _handle_debugging(self, task: Task, context_items: List[ContextItem]) -> Dict[str, Any]:
-        """Handle debugging capability"""
-        return {
-            "capability": "debugging",
-            "result": "Issues identified and resolved",
-            "details": "Debugging analysis completed"
-        }
-
-    async def _handle_refactoring(self, task: Task, context_items: List[ContextItem]) -> Dict[str, Any]:
-        """Handle refactoring capability"""
-        return {
-            "capability": "refactoring",
-            "result": "Code refactored successfully",
-            "details": "Code structure improved"
-        }
-
-    async def _handle_generic_capability(self, task: Task, context_items: List[ContextItem]) -> Dict[str, Any]:
-        """Handle generic capability"""
-        return {
-            "capability": "generic",
-            "result": "Task processed",
-            "details": "Generic task processing completed"
-        }
-
-    def _update_execution_metrics(self, results: Dict[str, Any]):
-        """Update execution metrics"""
-        completed_tasks = sum(1 for r in results["tasks"].values() if r["status"] == "completed")
-        failed_tasks = sum(1 for r in results["tasks"].values() if r["status"] == "failed")
-
-        self.execution_metrics["tasks_completed"] += completed_tasks
-        self.execution_metrics["tasks_failed"] += failed_tasks
-
-        if "total_duration" in results:
-            self.execution_metrics["total_execution_time"] += results["total_duration"]
-            total_tasks = self.execution_metrics["tasks_completed"] + self.execution_metrics["tasks_failed"]
-            if total_tasks > 0:
-                self.execution_metrics["average_task_time"] = self.execution_metrics["total_execution_time"] / total_tasks
-
-class BaseTool(ABC):
-    """Abstract base class for all agent tools"""
-
-    def __init__(self, name: str, description: str, config: AgentConfig):
-        self.name = name
-        self.description = description
-        self.config = config
-        self.usage_count = 0
-        self.last_used = None
-
-    @abstractmethod
-    async def execute(self, **kwargs) -> Dict[str, Any]:
-        """Execute the tool with given parameters"""
-        pass
-
-    def get_schema(self) -> Dict[str, Any]:
-        """Get tool schema for AI model integration"""
-        return {
-            "name": self.name,
-            "description": self.description,
-            "parameters": self._get_parameters_schema()
-        }
-
-    @abstractmethod
-    def _get_parameters_schema(self) -> Dict[str, Any]:
-        """Get parameters schema for the tool"""
-        pass
-
-    def _log_usage(self):
-        """Log tool usage"""
-        self.usage_count += 1
-        self.last_used = datetime.now()
-        logger.debug(f"Tool {self.name} used (count: {self.usage_count})")
-
-class FileSystemTool(BaseTool):
-    """Advanced file system operations tool"""
-
-    def __init__(self, config: AgentConfig):
-        super().__init__(
-            "filesystem",
-            "Advanced file system operations including read, write, search, and analysis",
-            config
-        )
-        self.workspace_dir = Path(config.workspace_dir)
-        self.file_cache: Dict[str, Dict[str, Any]] = {}
-
-        # File watching
-        self.observer = Observer()
-        self.file_changes: queue.Queue = queue.Queue()
-        self._setup_file_watching()
-
-    def _setup_file_watching(self):
-        """Setup file system watching"""
-        class ChangeHandler(FileSystemEventHandler):
-            def __init__(self, tool):
-                self.tool = tool
-
-            def on_modified(self, event):
-                if not event.is_directory:
-                    self.tool.file_changes.put({
-                        "type": "modified",
-                        "path": event.src_path,
-                        "timestamp": datetime.now()
-                    })
-
-        self.observer.schedule(ChangeHandler(self), str(self.workspace_dir), recursive=True)
-        self.observer.start()
-
-    async def execute(self, operation: str, **kwargs) -> Dict[str, Any]:
-        """Execute file system operation"""
-        self._log_usage()
-
-        operations = {
-            "read": self._read_file,
-            "write": self._write_file,
-            "list": self._list_files,
-            "search": self._search_files,
-            "analyze": self._analyze_file,
-            "watch": self._get_file_changes,
-            "backup": self._backup_file,
-            "diff": self._diff_files
-        }
-
-        if operation not in operations:
-            raise ValueError(f"Unknown operation: {operation}")
-
-        return await operations[operation](**kwargs)
-
-    async def _read_file(self, path: str, encoding: str = "utf-8") -> Dict[str, Any]:
-        """Read file with caching and metadata"""
-        file_path = self.workspace_dir / path
-
-        if not file_path.exists():
-            raise FileNotFoundError(f"File not found: {path}")
-
-        # Check cache
-        cache_key = f"{path}_{file_path.stat().st_mtime}"
-        if cache_key in self.file_cache:
-            return self.file_cache[cache_key]
-
+class WebManager:
+    """Handles web search and content fetching"""
+    
+    def __init__(self):
+        self.search_api_key = os.getenv('GOOGLE_SEARCH_API_KEY')
+        self.search_engine_id = os.getenv('GOOGLE_SEARCH_ENGINE_ID')
+    
+    def web_search(self, query: str, num_results: int = 5) -> List[Dict[str, str]]:
+        """Search the web using Google Custom Search API"""
+        if not self.search_api_key or not self.search_engine_id:
+            logger.warning("Google Search API not configured, using fallback search")
+            return self._fallback_search(query, num_results)
+        
         try:
-            content = file_path.read_text(encoding=encoding)
-
-            result = {
-                "path": path,
-                "content": content,
-                "size": len(content),
-                "lines": len(content.splitlines()),
-                "encoding": encoding,
-                "modified": datetime.fromtimestamp(file_path.stat().st_mtime),
-                "hash": hashlib.md5(content.encode()).hexdigest()
+            url = "https://www.googleapis.com/customsearch/v1"
+            params = {
+                'key': self.search_api_key,
+                'cx': self.search_engine_id,
+                'q': query,
+                'num': min(num_results, 10)
             }
-
-            # Cache result
-            self.file_cache[cache_key] = result
-
-            return result
-
-        except Exception as e:
-            raise Exception(f"Error reading file {path}: {str(e)}")
-
-    async def _write_file(self, path: str, content: str, encoding: str = "utf-8",
-                         backup: bool = True) -> Dict[str, Any]:
-        """Write file with backup and atomic operations"""
-        file_path = self.workspace_dir / path
-
-        # Create backup if file exists
-        if backup and file_path.exists():
-            await self._backup_file(path)
-
-        # Ensure directory exists
-        file_path.parent.mkdir(parents=True, exist_ok=True)
-
-        # Atomic write
-        temp_path = file_path.with_suffix(file_path.suffix + '.tmp')
-        try:
-            temp_path.write_text(content, encoding=encoding)
-            temp_path.replace(file_path)
-
-            return {
-                "path": path,
-                "size": len(content),
-                "lines": len(content.splitlines()),
-                "success": True
-            }
-
-        except Exception as e:
-            if temp_path.exists():
-                temp_path.unlink()
-            raise Exception(f"Error writing file {path}: {str(e)}")
-
-    async def _list_files(self, pattern: str = "*", recursive: bool = True) -> Dict[str, Any]:
-        """List files matching pattern"""
-        if recursive:
-            files = list(self.workspace_dir.rglob(pattern))
-        else:
-            files = list(self.workspace_dir.glob(pattern))
-
-        file_info = []
-        for file_path in files:
-            if file_path.is_file():
-                stat = file_path.stat()
-                file_info.append({
-                    "path": str(file_path.relative_to(self.workspace_dir)),
-                    "size": stat.st_size,
-                    "modified": datetime.fromtimestamp(stat.st_mtime),
-                    "extension": file_path.suffix
+            
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            
+            results = []
+            for item in data.get('items', []):
+                results.append({
+                    'title': item.get('title', ''),
+                    'url': item.get('link', ''),
+                    'snippet': item.get('snippet', '')
                 })
+            
+            return results
+        except Exception as e:
+            logger.error(f"Web search failed: {e}")
+            return self._fallback_search(query, num_results)
+    
+    def _fallback_search(self, query: str, num_results: int) -> List[Dict[str, str]]:
+        """Fallback search method when API is not available"""
+        return [{
+            'title': f'Search results for: {query}',
+            'url': f'https://www.google.com/search?q={query.replace(" ", "+")}',
+            'snippet': 'Google Search API not configured. Please set GOOGLE_SEARCH_API_KEY and GOOGLE_SEARCH_ENGINE_ID environment variables.'
+        }]
+    
+    def web_fetch(self, url: str) -> str:
+        """Fetch and convert webpage content to markdown"""
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
+            
+            soup = BeautifulSoup(response.content, 'html.parser')
+            
+            # Remove script and style elements
+            for script in soup(["script", "style"]):
+                script.decompose()
+            
+            # Extract text and convert to basic markdown
+            text = soup.get_text()
+            lines = (line.strip() for line in text.splitlines())
+            chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+            text = ' '.join(chunk for chunk in chunks if chunk)
+            
+            # Basic markdown conversion
+            title = soup.find('title')
+            if title:
+                text = f"# {title.get_text()}\n\n{text}"
+            
+            return text[:10000]  # Limit content length
+        except Exception as e:
+            logger.error(f"Failed to fetch {url}: {e}")
+            return f"Error fetching content from {url}: {str(e)}"
+    
+    def open_browser(self, url: str) -> Dict[str, Any]:
+        """Open URL in default browser"""
+        try:
+            webbrowser.open(url)
+            return {"success": True, "message": f"Opened {url} in browser"}
+        except Exception as e:
+            return {"error": str(e)}
+
+class FileManager:
+    """Handles file operations and code analysis"""
+
+    def __init__(self, workspace_root: str):
+        self.workspace_root = Path(workspace_root).resolve()
+
+    def view_file(self, path: str, view_range: Optional[List[int]] = None,
+                  search_query_regex: Optional[str] = None) -> Dict[str, Any]:
+        """View file content with optional range or regex search"""
+        try:
+            file_path = self.workspace_root / path
+            if not file_path.exists():
+                return {"error": f"File not found: {path}"}
+
+            if file_path.is_dir():
+                return self._list_directory(file_path)
+
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                lines = f.readlines()
+
+            if search_query_regex:
+                return self._search_in_lines(lines, search_query_regex, path)
+
+            if view_range:
+                start, end = view_range
+                if end == -1:
+                    end = len(lines)
+                lines = lines[max(0, start-1):end]
+
+            content = ''.join(f"{i+1:4d}: {line}" for i, line in enumerate(lines))
+            return {"content": content, "total_lines": len(lines)}
+
+        except Exception as e:
+            return {"error": str(e)}
+
+    def _list_directory(self, dir_path: Path) -> Dict[str, Any]:
+        """List directory contents"""
+        try:
+            items = []
+            for item in sorted(dir_path.iterdir()):
+                if not item.name.startswith('.'):
+                    item_type = "directory" if item.is_dir() else "file"
+                    items.append(f"{item_type}: {item.name}")
+            return {"content": "\n".join(items), "type": "directory"}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def _search_in_lines(self, lines: List[str], pattern: str, file_path: str) -> Dict[str, Any]:
+        """Search for regex pattern in file lines"""
+        try:
+            import re
+            regex = re.compile(pattern, re.IGNORECASE)
+            matches = []
+
+            for i, line in enumerate(lines):
+                if regex.search(line):
+                    start = max(0, i - 2)
+                    end = min(len(lines), i + 3)
+                    context = ''.join(f"{j+1:4d}: {lines[j]}" for j in range(start, end))
+                    matches.append(f"Match at line {i+1}:\n{context}")
+
+            if matches:
+                content = "\n...\n".join(matches)
+            else:
+                content = f"No matches found for pattern: {pattern}"
+
+            return {"content": content, "matches": len(matches)}
+        except Exception as e:
+            return {"error": f"Regex search failed: {e}"}
+
+    def save_file(self, path: str, content: str) -> Dict[str, Any]:
+        """Save content to a new file"""
+        try:
+            file_path = self.workspace_root / path
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+
+            if file_path.exists():
+                return {"error": f"File already exists: {path}. Use edit_file to modify existing files."}
+
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+
+            return {"success": True, "message": f"File saved: {path}"}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def edit_file(self, path: str, old_str: str, new_str: str,
+                  start_line: int, end_line: int) -> Dict[str, Any]:
+        """Edit file by replacing specific content"""
+        try:
+            file_path = self.workspace_root / path
+            if not file_path.exists():
+                return {"error": f"File not found: {path}"}
+
+            with open(file_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+
+            # Validate line numbers
+            if start_line < 1 or end_line > len(lines) or start_line > end_line:
+                return {"error": f"Invalid line range: {start_line}-{end_line}"}
+
+            # Extract the target section
+            target_lines = lines[start_line-1:end_line]
+            target_content = ''.join(target_lines)
+
+            if old_str not in target_content:
+                return {"error": f"Old string not found in specified range"}
+
+            # Replace content
+            new_content = target_content.replace(old_str, new_str)
+            new_lines = new_content.splitlines(keepends=True)
+
+            # Reconstruct file
+            result_lines = lines[:start_line-1] + new_lines + lines[end_line:]
+
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.writelines(result_lines)
+
+            return {"success": True, "message": f"File edited: {path}"}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def remove_files(self, file_paths: List[str]) -> Dict[str, Any]:
+        """Remove files safely"""
+        try:
+            removed = []
+            errors = []
+
+            for path in file_paths:
+                file_path = self.workspace_root / path
+                try:
+                    if file_path.exists():
+                        if file_path.is_file():
+                            file_path.unlink()
+                        else:
+                            shutil.rmtree(file_path)
+                        removed.append(path)
+                    else:
+                        errors.append(f"File not found: {path}")
+                except Exception as e:
+                    errors.append(f"Failed to remove {path}: {e}")
+
+            return {"removed": removed, "errors": errors}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def analyze_code(self, path: str) -> Dict[str, Any]:
+        """Analyze code structure and extract symbols"""
+        try:
+            file_path = self.workspace_root / path
+            if not file_path.exists():
+                return {"error": f"File not found: {path}"}
+
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+
+            # Basic code analysis
+            analysis = {
+                "file_type": file_path.suffix,
+                "lines": len(content.splitlines()),
+                "size": len(content),
+                "functions": [],
+                "classes": [],
+                "imports": []
+            }
+
+            # Python-specific analysis
+            if file_path.suffix == '.py':
+                analysis.update(self._analyze_python(content))
+            elif file_path.suffix in ['.js', '.ts']:
+                analysis.update(self._analyze_javascript(content))
+
+            return analysis
+        except Exception as e:
+            return {"error": str(e)}
+
+    def _analyze_python(self, content: str) -> Dict[str, List[str]]:
+        """Analyze Python code"""
+        functions = re.findall(r'def\s+(\w+)\s*\(', content)
+        classes = re.findall(r'class\s+(\w+)\s*[\(:]', content)
+        imports = re.findall(r'(?:from\s+\S+\s+)?import\s+([^\n]+)', content)
 
         return {
-            "files": file_info,
-            "count": len(file_info),
-            "pattern": pattern
+            "functions": functions,
+            "classes": classes,
+            "imports": [imp.strip() for imp in imports]
         }
 
-    async def _search_files(self, query: str, file_pattern: str = "*.py",
-                           case_sensitive: bool = False) -> Dict[str, Any]:
-        """Search for text in files"""
-        results = []
-        files = list(self.workspace_dir.rglob(file_pattern))
+    def _analyze_javascript(self, content: str) -> Dict[str, List[str]]:
+        """Analyze JavaScript/TypeScript code"""
+        functions = re.findall(r'function\s+(\w+)\s*\(', content)
+        functions.extend(re.findall(r'(\w+)\s*:\s*function\s*\(', content))
+        functions.extend(re.findall(r'const\s+(\w+)\s*=\s*\([^)]*\)\s*=>', content))
 
-        for file_path in files:
-            if file_path.is_file():
-                try:
-                    content = file_path.read_text(encoding='utf-8', errors='ignore')
-                    lines = content.splitlines()
+        classes = re.findall(r'class\s+(\w+)', content)
+        imports = re.findall(r'import\s+.*?from\s+[\'"]([^\'"]+)[\'"]', content)
 
-                    for line_num, line in enumerate(lines, 1):
-                        search_line = line if case_sensitive else line.lower()
-                        search_query = query if case_sensitive else query.lower()
+        return {
+            "functions": list(set(functions)),
+            "classes": classes,
+            "imports": imports
+        }
 
-                        if search_query in search_line:
-                            results.append({
-                                "file": str(file_path.relative_to(self.workspace_dir)),
-                                "line": line_num,
-                                "content": line.strip(),
-                                "context": lines[max(0, line_num-2):line_num+1]
-                            })
+class TaskManager:
+    """Manages task lists and project organization"""
 
-                except Exception:
+    def __init__(self):
+        self.tasks: Dict[str, Task] = {}
+        self.task_order: List[str] = []
+
+    def add_tasks(self, tasks_data: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Add new tasks to the task list"""
+        try:
+            added_tasks = []
+            for task_data in tasks_data:
+                task_id = str(uuid.uuid4())
+                task = Task(
+                    id=task_id,
+                    name=task_data['name'],
+                    description=task_data['description'],
+                    state=task_data.get('state', 'NOT_STARTED'),
+                    parent_id=task_data.get('parent_task_id')
+                )
+
+                self.tasks[task_id] = task
+
+                # Handle insertion position
+                if 'after_task_id' in task_data:
+                    after_id = task_data['after_task_id']
+                    if after_id in self.task_order:
+                        idx = self.task_order.index(after_id) + 1
+                        self.task_order.insert(idx, task_id)
+                    else:
+                        self.task_order.append(task_id)
+                else:
+                    self.task_order.append(task_id)
+
+                added_tasks.append(task_id)
+
+            return {"success": True, "added_tasks": added_tasks}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def update_tasks(self, tasks_data: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Update existing tasks"""
+        try:
+            updated_tasks = []
+            for task_data in tasks_data:
+                task_id = task_data['task_id']
+                if task_id not in self.tasks:
                     continue
 
-        return {
-            "results": results,
-            "count": len(results),
-            "query": query
+                task = self.tasks[task_id]
+                if 'name' in task_data:
+                    task.name = task_data['name']
+                if 'description' in task_data:
+                    task.description = task_data['description']
+                if 'state' in task_data:
+                    task.state = task_data['state']
+
+                updated_tasks.append(task_id)
+
+            return {"success": True, "updated_tasks": updated_tasks}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def view_tasklist(self) -> str:
+        """Generate markdown representation of task list"""
+        if not self.tasks:
+            return "No tasks currently defined."
+
+        lines = ["# Task List\n"]
+
+        # Group tasks by hierarchy
+        root_tasks = [tid for tid in self.task_order if self.tasks[tid].parent_id is None]
+
+        for task_id in root_tasks:
+            lines.extend(self._format_task_tree(task_id, 0))
+
+        return "\n".join(lines)
+
+    def _format_task_tree(self, task_id: str, indent_level: int) -> List[str]:
+        """Format task and its subtasks recursively"""
+        task = self.tasks[task_id]
+        indent = "  " * indent_level
+
+        # Format state symbol
+        state_symbols = {
+            'NOT_STARTED': '[ ]',
+            'IN_PROGRESS': '[/]',
+            'COMPLETE': '[x]',
+            'CANCELLED': '[-]'
+        }
+        symbol = state_symbols.get(task.state, '[ ]')
+
+        lines = [f"{indent}- {symbol} **{task.name}** ({task.id})"]
+        if task.description:
+            lines.append(f"{indent}  {task.description}")
+
+        # Add subtasks
+        subtasks = [tid for tid in self.task_order
+                   if tid in self.tasks and self.tasks[tid].parent_id == task_id]
+        for subtask_id in subtasks:
+            lines.extend(self._format_task_tree(subtask_id, indent_level + 1))
+
+        return lines
+
+    def reorganize_tasklist(self, markdown: str) -> Dict[str, Any]:
+        """Reorganize task list from markdown representation"""
+        try:
+            # Parse markdown and rebuild task structure
+            # This is a simplified implementation
+            lines = markdown.strip().split('\n')
+            new_tasks = {}
+            new_order = []
+
+            for line in lines:
+                if line.strip().startswith('- ['):
+                    # Extract task info from markdown
+                    match = re.search(r'- \[(.)\] \*\*(.+?)\*\* \((.+?)\)', line)
+                    if match:
+                        state_char, name, task_id = match.groups()
+                        state_map = {' ': 'NOT_STARTED', '/': 'IN_PROGRESS',
+                                   'x': 'COMPLETE', '-': 'CANCELLED'}
+                        state = state_map.get(state_char, 'NOT_STARTED')
+
+                        if task_id in self.tasks:
+                            task = self.tasks[task_id]
+                            task.name = name
+                            task.state = state
+                            new_tasks[task_id] = task
+                            new_order.append(task_id)
+
+            self.tasks = new_tasks
+            self.task_order = new_order
+            return {"success": True}
+        except Exception as e:
+            return {"error": str(e)}
+
+class MemoryManager:
+    """Manages long-term memory storage"""
+
+    def __init__(self):
+        self.memories: Dict[str, Memory] = {}
+        self.memory_file = Path("agent_memories.json")
+        self.load_memories()
+
+    def remember(self, content: str, tags: List[str] = None) -> Dict[str, Any]:
+        """Store a new memory"""
+        try:
+            memory_id = str(uuid.uuid4())
+            memory = Memory(
+                id=memory_id,
+                content=content,
+                created_at=datetime.now().isoformat(),
+                tags=tags or []
+            )
+
+            self.memories[memory_id] = memory
+            self.save_memories()
+
+            return {"success": True, "memory_id": memory_id}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def search_memories(self, query: str) -> List[Dict[str, Any]]:
+        """Search memories by content or tags"""
+        results = []
+        query_lower = query.lower()
+
+        for memory in self.memories.values():
+            if (query_lower in memory.content.lower() or
+                any(query_lower in tag.lower() for tag in memory.tags)):
+                results.append({
+                    "id": memory.id,
+                    "content": memory.content,
+                    "created_at": memory.created_at,
+                    "tags": memory.tags
+                })
+
+        return sorted(results, key=lambda x: x['created_at'], reverse=True)
+
+    def save_memories(self):
+        """Save memories to file"""
+        try:
+            data = {mid: asdict(memory) for mid, memory in self.memories.items()}
+            with open(self.memory_file, 'w') as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            logger.error(f"Failed to save memories: {e}")
+
+    def load_memories(self):
+        """Load memories from file"""
+        try:
+            if self.memory_file.exists():
+                with open(self.memory_file, 'r') as f:
+                    data = json.load(f)
+
+                for mid, memory_data in data.items():
+                    self.memories[mid] = Memory(**memory_data)
+        except Exception as e:
+            logger.error(f"Failed to load memories: {e}")
+
+class DiagnosticManager:
+    """Provides code diagnostics and debugging support"""
+
+    def __init__(self, file_manager: FileManager):
+        self.file_manager = file_manager
+
+    def get_diagnostics(self, file_paths: List[str]) -> Dict[str, Any]:
+        """Get diagnostic information for files"""
+        diagnostics = {}
+
+        for path in file_paths:
+            try:
+                file_path = self.file_manager.workspace_root / path
+                if not file_path.exists():
+                    diagnostics[path] = {"error": "File not found"}
+                    continue
+
+                issues = []
+
+                # Basic syntax checking
+                if file_path.suffix == '.py':
+                    issues.extend(self._check_python_syntax(file_path))
+                elif file_path.suffix in ['.js', '.ts']:
+                    issues.extend(self._check_javascript_syntax(file_path))
+
+                diagnostics[path] = {"issues": issues}
+
+            except Exception as e:
+                diagnostics[path] = {"error": str(e)}
+
+        return diagnostics
+
+    def _check_python_syntax(self, file_path: Path) -> List[Dict[str, Any]]:
+        """Check Python syntax"""
+        issues = []
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            compile(content, str(file_path), 'exec')
+        except SyntaxError as e:
+            issues.append({
+                "type": "error",
+                "line": e.lineno,
+                "message": f"Syntax error: {e.msg}",
+                "severity": "error"
+            })
+        except Exception as e:
+            issues.append({
+                "type": "error",
+                "message": f"Compilation error: {str(e)}",
+                "severity": "error"
+            })
+
+        return issues
+
+    def _check_javascript_syntax(self, file_path: Path) -> List[Dict[str, Any]]:
+        """Basic JavaScript syntax checking"""
+        issues = []
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            # Basic checks for common issues
+            if content.count('(') != content.count(')'):
+                issues.append({
+                    "type": "warning",
+                    "message": "Mismatched parentheses",
+                    "severity": "warning"
+                })
+
+            if content.count('{') != content.count('}'):
+                issues.append({
+                    "type": "warning",
+                    "message": "Mismatched braces",
+                    "severity": "warning"
+                })
+
+        except Exception as e:
+            issues.append({
+                "type": "error",
+                "message": f"Analysis error: {str(e)}",
+                "severity": "error"
+            })
+
+        return issues
+
+class PackageManager:
+    """Handles package management across different languages"""
+
+    def __init__(self, workspace_root: str):
+        self.workspace_root = Path(workspace_root)
+
+    def detect_package_manager(self) -> Dict[str, str]:
+        """Detect available package managers in the workspace"""
+        managers = {}
+
+        # Python
+        if (self.workspace_root / "requirements.txt").exists():
+            managers["python"] = "pip"
+        elif (self.workspace_root / "pyproject.toml").exists():
+            managers["python"] = "poetry"
+        elif (self.workspace_root / "Pipfile").exists():
+            managers["python"] = "pipenv"
+
+        # Node.js
+        if (self.workspace_root / "package.json").exists():
+            if (self.workspace_root / "yarn.lock").exists():
+                managers["node"] = "yarn"
+            elif (self.workspace_root / "pnpm-lock.yaml").exists():
+                managers["node"] = "pnpm"
+            else:
+                managers["node"] = "npm"
+
+        # Rust
+        if (self.workspace_root / "Cargo.toml").exists():
+            managers["rust"] = "cargo"
+
+        # Go
+        if (self.workspace_root / "go.mod").exists():
+            managers["go"] = "go"
+
+        return managers
+
+    def install_package(self, package: str, language: str = None) -> Dict[str, Any]:
+        """Install a package using appropriate package manager"""
+        managers = self.detect_package_manager()
+
+        if language and language in managers:
+            manager = managers[language]
+        elif len(managers) == 1:
+            manager = list(managers.values())[0]
+        else:
+            return {"error": "Could not determine package manager. Please specify language."}
+
+        commands = {
+            "pip": f"pip install {package}",
+            "poetry": f"poetry add {package}",
+            "pipenv": f"pipenv install {package}",
+            "npm": f"npm install {package}",
+            "yarn": f"yarn add {package}",
+            "pnpm": f"pnpm add {package}",
+            "cargo": f"cargo add {package}",
+            "go": f"go get {package}"
         }
 
-    async def _analyze_file(self, path: str) -> Dict[str, Any]:
-        """Analyze file structure and content"""
-        file_data = await self._read_file(path)
-        content = file_data["content"]
+        if manager not in commands:
+            return {"error": f"Unsupported package manager: {manager}"}
 
-        analysis = {
-            "path": path,
-            "language": self._detect_language(path),
-            "metrics": {
-                "lines": file_data["lines"],
-                "size": file_data["size"],
-                "words": len(content.split()),
-                "characters": len(content)
+        return {"command": commands[manager], "manager": manager}
+
+class MermaidRenderer:
+    """Handles Mermaid diagram rendering and visualization"""
+
+    def __init__(self):
+        self.mermaid_cdn = "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"
+
+    def render_mermaid(self, diagram_definition: str, title: str = "Mermaid Diagram") -> Dict[str, Any]:
+        """Render a Mermaid diagram to HTML and optionally open in browser"""
+        try:
+            # Validate diagram definition
+            if not diagram_definition.strip():
+                return {"error": "Empty diagram definition"}
+
+            # Generate HTML with Mermaid
+            html_content = self._generate_mermaid_html(diagram_definition, title)
+
+            # Save to temporary file
+            temp_file = Path("temp_mermaid_diagram.html")
+            with open(temp_file, 'w', encoding='utf-8') as f:
+                f.write(html_content)
+
+            # Open in browser
+            file_url = f"file://{temp_file.absolute()}"
+            webbrowser.open(file_url)
+
+            return {
+                "success": True,
+                "message": f"Mermaid diagram '{title}' rendered and opened in browser",
+                "file_path": str(temp_file),
+                "url": file_url
             }
-        }
 
-        # Language-specific analysis
-        if analysis["language"] == "python":
-            analysis.update(await self._analyze_python_file(content))
-        elif analysis["language"] in ["javascript", "typescript"]:
-            analysis.update(await self._analyze_js_file(content))
+        except Exception as e:
+            logger.error(f"Failed to render Mermaid diagram: {e}")
+            return {"error": str(e)}
 
-        return analysis
+    def _generate_mermaid_html(self, diagram_definition: str, title: str) -> str:
+        """Generate HTML with embedded Mermaid diagram"""
+        return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{title}</title>
+    <script src="{self.mermaid_cdn}"></script>
+    <style>
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }}
+        .container {{
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+        }}
+        .header {{
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 20px;
+        }}
+        .header h1 {{
+            color: #333;
+            margin: 0;
+        }}
+        .diagram-container {{
+            text-align: center;
+            margin: 20px 0;
+        }}
+        .controls {{
+            text-align: center;
+            margin: 20px 0;
+        }}
+        .btn {{
+            background: #007acc;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 0 10px;
+            font-size: 14px;
+        }}
+        .btn:hover {{
+            background: #005a9e;
+        }}
+        #mermaid-diagram {{
+            margin: 20px auto;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>{title}</h1>
+            <p>Generated by Augment Agent Replica</p>
+        </div>
 
-    def _detect_language(self, path: str) -> str:
-        """Detect programming language from file extension"""
-        extension_map = {
-            '.py': 'python',
-            '.js': 'javascript',
-            '.ts': 'typescript',
-            '.jsx': 'javascript',
-            '.tsx': 'typescript',
-            '.java': 'java',
-            '.cpp': 'cpp',
-            '.c': 'c',
-            '.h': 'c',
-            '.cs': 'csharp',
-            '.php': 'php',
-            '.rb': 'ruby',
-            '.go': 'go',
-            '.rs': 'rust',
-            '.swift': 'swift',
-            '.kt': 'kotlin'
-        }
+        <div class="controls">
+            <button class="btn" onclick="zoomIn()">Zoom In</button>
+            <button class="btn" onclick="zoomOut()">Zoom Out</button>
+            <button class="btn" onclick="resetZoom()">Reset Zoom</button>
+            <button class="btn" onclick="copyDiagram()">Copy Definition</button>
+        </div>
 
-        suffix = Path(path).suffix.lower()
-        return extension_map.get(suffix, 'unknown')
+        <div class="diagram-container">
+            <div id="mermaid-diagram">
+                <pre class="mermaid">
+{diagram_definition}
+                </pre>
+            </div>
+        </div>
+    </div>
 
-    async def _analyze_python_file(self, content: str) -> Dict[str, Any]:
-        """Analyze Python file using AST"""
+    <script>
+        mermaid.initialize({{
+            startOnLoad: true,
+            theme: 'default',
+            flowchart: {{
+                useMaxWidth: true,
+                htmlLabels: true
+            }}
+        }});
+
+        let currentZoom = 1;
+        const diagram = document.getElementById('mermaid-diagram');
+
+        function zoomIn() {{
+            currentZoom += 0.1;
+            diagram.style.transform = `scale(${{currentZoom}})`;
+        }}
+
+        function zoomOut() {{
+            currentZoom = Math.max(0.1, currentZoom - 0.1);
+            diagram.style.transform = `scale(${{currentZoom}})`;
+        }}
+
+        function resetZoom() {{
+            currentZoom = 1;
+            diagram.style.transform = 'scale(1)';
+        }}
+
+        function copyDiagram() {{
+            const definition = `{diagram_definition}`;
+            navigator.clipboard.writeText(definition).then(() => {{
+                alert('Diagram definition copied to clipboard!');
+            }});
+        }}
+    </script>
+</body>
+</html>"""
+
+class CodebaseAnalyzer:
+    """Advanced codebase analysis and context retrieval"""
+
+    def __init__(self, workspace_root: str):
+        self.workspace_root = Path(workspace_root)
+        self.file_cache = {}
+        self.symbol_index = {}
+        self.dependency_graph = {}
+
+    def codebase_retrieval(self, information_request: str) -> Dict[str, Any]:
+        """Retrieve relevant code snippets based on natural language request"""
+        try:
+            # Parse the request to understand what's needed
+            request_lower = information_request.lower()
+
+            # Build or update index if needed
+            self._build_symbol_index()
+
+            # Search for relevant code
+            relevant_files = []
+            relevant_symbols = []
+
+            # Keyword-based search
+            keywords = self._extract_keywords(information_request)
+
+            for keyword in keywords:
+                # Search in symbol names
+                matching_symbols = self._search_symbols(keyword)
+                relevant_symbols.extend(matching_symbols)
+
+                # Search in file contents
+                matching_files = self._search_file_contents(keyword)
+                relevant_files.extend(matching_files)
+
+            # Rank and return results
+            results = self._rank_results(relevant_files, relevant_symbols, information_request)
+
+            return {
+                "success": True,
+                "results": results,
+                "total_files": len(set(relevant_files)),
+                "total_symbols": len(set(relevant_symbols))
+            }
+
+        except Exception as e:
+            logger.error(f"Codebase retrieval failed: {e}")
+            return {"error": str(e)}
+
+    def _build_symbol_index(self):
+        """Build an index of all symbols in the codebase"""
+        try:
+            for file_path in self._get_code_files():
+                if file_path not in self.file_cache:
+                    self._index_file(file_path)
+        except Exception as e:
+            logger.error(f"Failed to build symbol index: {e}")
+
+    def _get_code_files(self) -> List[Path]:
+        """Get all code files in the workspace"""
+        code_extensions = {'.py', '.js', '.ts', '.java', '.cpp', '.c', '.h', '.cs', '.go', '.rs', '.php', '.rb'}
+        code_files = []
+
+        for file_path in self.workspace_root.rglob('*'):
+            if (file_path.is_file() and
+                file_path.suffix in code_extensions and
+                not any(part.startswith('.') for part in file_path.parts)):
+                code_files.append(file_path)
+
+        return code_files
+
+    def _index_file(self, file_path: Path):
+        """Index symbols in a single file"""
+        try:
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+
+            self.file_cache[file_path] = content
+
+            # Extract symbols based on file type
+            if file_path.suffix == '.py':
+                symbols = self._extract_python_symbols(content, file_path)
+            elif file_path.suffix in ['.js', '.ts']:
+                symbols = self._extract_javascript_symbols(content, file_path)
+            else:
+                symbols = self._extract_generic_symbols(content, file_path)
+
+            self.symbol_index[file_path] = symbols
+
+        except Exception as e:
+            logger.error(f"Failed to index file {file_path}: {e}")
+
+    def _extract_python_symbols(self, content: str, file_path: Path) -> List[Dict[str, Any]]:
+        """Extract Python symbols using AST"""
+        symbols = []
         try:
             tree = ast.parse(content)
 
-            functions = []
-            classes = []
-            imports = []
-
             for node in ast.walk(tree):
                 if isinstance(node, ast.FunctionDef):
-                    functions.append({
-                        "name": node.name,
-                        "line": node.lineno,
-                        "args": len(node.args.args),
-                        "docstring": ast.get_docstring(node)
+                    symbols.append({
+                        'type': 'function',
+                        'name': node.name,
+                        'line': node.lineno,
+                        'file': str(file_path),
+                        'args': [arg.arg for arg in node.args.args] if hasattr(node.args, 'args') else []
                     })
                 elif isinstance(node, ast.ClassDef):
-                    classes.append({
-                        "name": node.name,
-                        "line": node.lineno,
-                        "methods": len([n for n in node.body if isinstance(n, ast.FunctionDef)]),
-                        "docstring": ast.get_docstring(node)
+                    symbols.append({
+                        'type': 'class',
+                        'name': node.name,
+                        'line': node.lineno,
+                        'file': str(file_path),
+                        'methods': [n.name for n in node.body if isinstance(n, ast.FunctionDef)]
                     })
-                elif isinstance(node, (ast.Import, ast.ImportFrom)):
-                    if isinstance(node, ast.Import):
-                        imports.extend([alias.name for alias in node.names])
-                    else:
-                        imports.append(node.module)
-
-            return {
-                "functions": functions,
-                "classes": classes,
-                "imports": list(set(filter(None, imports))),
-                "complexity": self._calculate_complexity(tree)
-            }
-
-        except SyntaxError as e:
-            return {"error": f"Syntax error: {str(e)}"}
-
-    async def _analyze_js_file(self, content: str) -> Dict[str, Any]:
-        """Analyze JavaScript/TypeScript file"""
-        # Simple regex-based analysis (in production, use proper parser)
-        import re
-
-        functions = re.findall(r'function\s+(\w+)', content)
-        arrow_functions = re.findall(r'(?:const|let|var)\s+(\w+)\s*=\s*(?:\([^)]*\)\s*=>|\w+\s*=>)', content)
-        classes = re.findall(r'class\s+(\w+)', content)
-        imports = re.findall(r'import.*?from\s+[\'"]([^\'"]+)[\'"]', content)
-
-        return {
-            "functions": functions + arrow_functions,
-            "classes": classes,
-            "imports": imports,
-            "complexity": len(functions) + len(arrow_functions) + len(classes)
-        }
-
-    def _calculate_complexity(self, tree) -> int:
-        """Calculate cyclomatic complexity"""
-        complexity = 1  # Base complexity
-
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.If, ast.While, ast.For, ast.AsyncFor)):
-                complexity += 1
-            elif isinstance(node, ast.ExceptHandler):
-                complexity += 1
-            elif isinstance(node, ast.With):
-                complexity += 1
-
-        return complexity
-
-    async def _backup_file(self, path: str) -> Dict[str, Any]:
-        """Create backup of file"""
-        file_path = self.workspace_dir / path
-        if not file_path.exists():
-            raise FileNotFoundError(f"File not found: {path}")
-
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_path = file_path.with_suffix(f"{file_path.suffix}.backup_{timestamp}")
-
-        import shutil
-        shutil.copy2(file_path, backup_path)
-
-        return {
-            "original": path,
-            "backup": str(backup_path.relative_to(self.workspace_dir)),
-            "timestamp": timestamp
-        }
-
-    async def _diff_files(self, path1: str, path2: str) -> Dict[str, Any]:
-        """Compare two files and return differences"""
-        import difflib
-
-        file1_data = await self._read_file(path1)
-        file2_data = await self._read_file(path2)
-
-        diff = list(difflib.unified_diff(
-            file1_data["content"].splitlines(keepends=True),
-            file2_data["content"].splitlines(keepends=True),
-            fromfile=path1,
-            tofile=path2
-        ))
-
-        return {
-            "file1": path1,
-            "file2": path2,
-            "diff": diff,
-            "changes": len(diff)
-        }
-
-    async def _get_file_changes(self) -> Dict[str, Any]:
-        """Get recent file changes"""
-        changes = []
-        while not self.file_changes.empty():
-            try:
-                change = self.file_changes.get_nowait()
-                changes.append(change)
-            except queue.Empty:
-                break
-
-        return {
-            "changes": changes,
-            "count": len(changes)
-        }
-
-    def _get_parameters_schema(self) -> Dict[str, Any]:
-        """Get parameters schema for filesystem tool"""
-        return {
-            "type": "object",
-            "properties": {
-                "operation": {
-                    "type": "string",
-                    "enum": ["read", "write", "list", "search", "analyze", "watch", "backup", "diff"],
-                    "description": "File system operation to perform"
-                },
-                "path": {
-                    "type": "string",
-                    "description": "File or directory path"
-                },
-                "content": {
-                    "type": "string",
-                    "description": "Content to write (for write operation)"
-                },
-                "query": {
-                    "type": "string",
-                    "description": "Search query (for search operation)"
-                },
-                "pattern": {
-                    "type": "string",
-                    "description": "File pattern (for list operation)"
-                }
-            },
-            "required": ["operation"]
-        }
-
-class AdvancedAICodingAgent:
-    """Main AI Coding Agent with advanced capabilities"""
-
-    def __init__(self, config: AgentConfig):
-        self.config = config
-        self.session_id = f"session_{int(time.time())}"
-
-        # Initialize core components
-        self.context_manager = ContextManager(config)
-        self.reasoning_engine = ReasoningEngine(config, self.context_manager)
-        self.task_planner = TaskPlanner(config, self.context_manager, self.reasoning_engine)
-        self.execution_engine = ExecutionEngine(config, self.context_manager,
-                                               self.reasoning_engine, self.task_planner)
-
-        # Initialize tools
-        self.tools = {
-            "filesystem": FileSystemTool(config)
-        }
-
-        # Session state
-        self.conversation_history: List[Dict[str, Any]] = []
-        self.active_projects: Dict[str, Dict[str, Any]] = {}
-        self.learning_data: Dict[str, Any] = {"patterns": [], "feedback": []}
-
-        # Performance monitoring
-        self.performance_metrics = {
-            "requests_processed": 0,
-            "average_response_time": 0,
-            "success_rate": 0,
-            "user_satisfaction": 0
-        }
-
-        logger.info(f"Advanced AI Coding Agent initialized (session: {self.session_id})")
-
-    async def process_request(self, request: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
-        """Process a user request with full AI capabilities"""
-        request_start = datetime.now()
-        request_id = f"req_{int(time.time() * 1000)}"
-
-        logger.info(f"Processing request {request_id}: {request[:100]}...")
-
-        try:
-            # Add request to conversation history
-            self.conversation_history.append({
-                "id": request_id,
-                "timestamp": request_start,
-                "type": "user_request",
-                "content": request,
-                "context": context or {}
-            })
-
-            # Add request to context
-            request_context = ContextItem(
-                type=ContextType.CONVERSATION,
-                content=request,
-                metadata={"request_id": request_id, "user_context": context or {}}
-            )
-            self.context_manager.add_context(request_context)
-
-            # Phase 1: Analyze request
-            console.print("[blue]🧠 Analyzing request...[/blue]")
-            analysis = await self.reasoning_engine.analyze_request(request)
-
-            # Phase 2: Create execution plan
-            console.print("[blue]📋 Creating execution plan...[/blue]")
-            tasks = await self.task_planner.create_execution_plan(request, analysis)
-
-            # Phase 3: Execute plan
-            console.print("[blue]⚡ Executing plan...[/blue]")
-            execution_results = await self.execution_engine.execute_task_plan(tasks)
-
-            # Phase 4: Generate response
-            response = await self._generate_response(request, analysis, execution_results)
-
-            # Add response to conversation history
-            self.conversation_history.append({
-                "id": f"resp_{request_id}",
-                "timestamp": datetime.now(),
-                "type": "agent_response",
-                "content": response,
-                "analysis": analysis,
-                "execution_results": execution_results
-            })
-
-            # Update performance metrics
-            request_duration = (datetime.now() - request_start).total_seconds()
-            self._update_performance_metrics(request_duration, execution_results["overall_status"])
-
-            logger.info(f"Request {request_id} completed in {request_duration:.2f}s")
-
-            return {
-                "request_id": request_id,
-                "response": response,
-                "analysis": analysis,
-                "execution_results": execution_results,
-                "duration": request_duration,
-                "session_id": self.session_id
-            }
-
-        except Exception as e:
-            logger.error(f"Error processing request {request_id}: {e}")
-            error_response = {
-                "request_id": request_id,
-                "error": str(e),
-                "response": f"I encountered an error while processing your request: {str(e)}",
-                "duration": (datetime.now() - request_start).total_seconds(),
-                "session_id": self.session_id
-            }
-
-            self._update_performance_metrics(error_response["duration"], "error")
-            return error_response
-
-    async def _generate_response(self, request: str, analysis: Dict[str, Any],
-                               execution_results: Dict[str, Any]) -> str:
-        """Generate comprehensive response based on analysis and execution"""
-
-        # Prepare response context
-        response_prompt = f"""
-Generate a comprehensive response for this development request:
-
-ORIGINAL REQUEST: {request}
-
-ANALYSIS SUMMARY:
-- Intent: {analysis.get('intent', 'Unknown')}
-- Complexity: {analysis.get('complexity', {})}
-- Approach: {analysis.get('approach', {})}
-
-EXECUTION RESULTS:
-- Overall Status: {execution_results.get('overall_status', 'Unknown')}
-- Tasks Completed: {len([t for t in execution_results.get('tasks', {}).values() if t.get('status') == 'completed'])}
-- Total Tasks: {len(execution_results.get('tasks', {}))}
-- Duration: {execution_results.get('total_duration', 0):.2f} seconds
-
-RESPONSE GUIDELINES:
-1. Acknowledge what was accomplished
-2. Explain the approach taken
-3. Highlight key results and artifacts
-4. Mention any challenges or limitations
-5. Suggest next steps or improvements
-6. Be conversational and helpful
-
-Generate a natural, informative response that demonstrates understanding and provides value.
-"""
-
-        try:
-            # Use primary AI model for response generation
-            if 'gemini' in self.reasoning_engine.models:
-                response = await self.reasoning_engine.models['gemini'].generate_content_async(response_prompt)
-                return response.text
-            else:
-                # Fallback response
-                return self._generate_fallback_response(analysis, execution_results)
-
-        except Exception as e:
-            logger.warning(f"AI response generation failed: {e}")
-            return self._generate_fallback_response(analysis, execution_results)
-
-    def _generate_fallback_response(self, analysis: Dict[str, Any],
-                                  execution_results: Dict[str, Any]) -> str:
-        """Generate fallback response when AI models are unavailable"""
-        status = execution_results.get('overall_status', 'unknown')
-        task_count = len(execution_results.get('tasks', {}))
-        completed_count = len([t for t in execution_results.get('tasks', {}).values()
-                             if t.get('status') == 'completed'])
-
-        if status == 'completed':
-            return f"""✅ **Task Completed Successfully**
-
-I've successfully processed your request and completed all {task_count} planned tasks.
-
-**What was accomplished:**
-- Analyzed your requirements and created an execution plan
-- Executed {completed_count} tasks with comprehensive monitoring
-- Generated results and artifacts as needed
-
-**Approach taken:**
-- Used {analysis.get('approach', {}).get('methodology', 'systematic')} methodology
-- Applied best practices and quality standards
-- Implemented error handling and validation
-
-The work is complete and ready for your review. Let me know if you need any modifications or have additional requirements!"""
-
-        elif status == 'partially_completed':
-            return f"""⚠️ **Task Partially Completed**
-
-I've processed your request and completed {completed_count} out of {task_count} planned tasks.
-
-**What was accomplished:**
-- Successfully completed the core functionality
-- Some optional or advanced features may need attention
-- Generated partial results and artifacts
-
-**Next steps:**
-- Review the completed work
-- Identify any remaining requirements
-- Let me know if you'd like me to continue with the remaining tasks
-
-The partial results are available for your review."""
-
-        else:
-            return f"""❌ **Task Encountered Issues**
-
-I attempted to process your request but encountered some challenges.
-
-**Status:** {status}
-**Tasks attempted:** {task_count}
-**Tasks completed:** {completed_count}
-
-**What I can help with:**
-- Analyzing the specific issues encountered
-- Providing alternative approaches
-- Breaking down the request into smaller, manageable tasks
-- Offering guidance on how to proceed
-
-Please let me know how you'd like to proceed, and I'll do my best to assist you!"""
-
-    def _update_performance_metrics(self, duration: float, status: str):
-        """Update performance metrics"""
-        self.performance_metrics["requests_processed"] += 1
-
-        # Update average response time
-        current_avg = self.performance_metrics["average_response_time"]
-        count = self.performance_metrics["requests_processed"]
-        self.performance_metrics["average_response_time"] = (current_avg * (count - 1) + duration) / count
-
-        # Update success rate
-        if status in ["completed", "partially_completed"]:
-            success_count = self.performance_metrics["success_rate"] * (count - 1) + 1
-        else:
-            success_count = self.performance_metrics["success_rate"] * (count - 1)
-
-        self.performance_metrics["success_rate"] = success_count / count
-
-    async def get_project_status(self) -> Dict[str, Any]:
-        """Get comprehensive project status"""
-        return {
-            "session_id": self.session_id,
-            "workspace": self.config.workspace_dir,
-            "conversation_length": len(self.conversation_history),
-            "context_summary": self.context_manager.get_context_summary(),
-            "performance_metrics": self.performance_metrics,
-            "active_capabilities": list(self.config.enabled_capabilities),
-            "tools_available": list(self.tools.keys())
-        }
-
-    async def learn_from_feedback(self, request_id: str, feedback: Dict[str, Any]):
-        """Learn from user feedback to improve future responses"""
-        if self.config.enable_learning:
-            self.learning_data["feedback"].append({
-                "request_id": request_id,
-                "feedback": feedback,
-                "timestamp": datetime.now()
-            })
-
-            # Update user satisfaction metric
-            if "satisfaction" in feedback:
-                current_satisfaction = self.performance_metrics["user_satisfaction"]
-                count = len(self.learning_data["feedback"])
-                new_satisfaction = (current_satisfaction * (count - 1) + feedback["satisfaction"]) / count
-                self.performance_metrics["user_satisfaction"] = new_satisfaction
-
-            logger.info(f"Learned from feedback for request {request_id}")
-
-    def get_conversation_summary(self) -> str:
-        """Get summary of current conversation"""
-        if not self.conversation_history:
-            return "No conversation history available."
-
-        user_requests = [item for item in self.conversation_history if item["type"] == "user_request"]
-        agent_responses = [item for item in self.conversation_history if item["type"] == "agent_response"]
-
-        summary = f"""**Conversation Summary**
-- Session ID: {self.session_id}
-- Total exchanges: {len(user_requests)}
-- Duration: {(datetime.now() - self.conversation_history[0]["timestamp"]).total_seconds() / 60:.1f} minutes
-- Success rate: {self.performance_metrics["success_rate"]:.1%}
-
-**Recent topics:**"""
-
-        for request in user_requests[-3:]:  # Last 3 requests
-            summary += f"\n- {request['content'][:100]}..."
-
-        return summary
-
-# CLI Interface
-import click
-
-@click.group()
-@click.option('--config', default='.ai-agent-config.json', help='Configuration file path')
-@click.option('--workspace', default='.', help='Workspace directory')
-@click.option('--api-key', help='Primary AI model API key')
-@click.option('--model', default='gemini-2.0-flash-exp', help='Primary AI model')
-@click.option('--debug', is_flag=True, help='Enable debug logging')
-@click.option('--verbose', is_flag=True, help='Enable verbose output')
-@click.pass_context
-def cli(ctx, config, workspace, api_key, model, debug, verbose):
-    """Advanced AI Coding Agent - Sophisticated AI Assistant for Developers"""
-
-    # Configure logging
-    if debug:
-        logging.getLogger().setLevel(logging.DEBUG)
-
-    # Load configuration
-    agent_config = AgentConfig()
-
-    # Load from config file if exists
-    if os.path.exists(config):
-        try:
-            with open(config, 'r') as f:
-                config_data = json.load(f)
-                for key, value in config_data.items():
-                    if hasattr(agent_config, key):
-                        setattr(agent_config, key, value)
-        except Exception as e:
-            console.print(f"[yellow]Warning: Could not load config file: {e}[/yellow]")
-
-    # Override with command line arguments
-    if workspace:
-        agent_config.workspace_dir = os.path.abspath(workspace)
-    if model:
-        agent_config.primary_model = model
-    if verbose:
-        agent_config.verbose_output = verbose
-
-    # Set API keys
-    if api_key:
-        agent_config.api_keys['gemini'] = api_key
-    else:
-        # Try environment variables
-        gemini_key = os.getenv('GEMINI_API_KEY')
-        openai_key = os.getenv('OPENAI_API_KEY')
-        anthropic_key = os.getenv('ANTHROPIC_API_KEY')
-
-        if gemini_key:
-            agent_config.api_keys['gemini'] = gemini_key
-        if openai_key:
-            agent_config.api_keys['openai'] = openai_key
-        if anthropic_key:
-            agent_config.api_keys['anthropic'] = anthropic_key
-
-    if not agent_config.api_keys:
-        console.print("[red]Error: No API keys configured. Set environment variables or use --api-key option.[/red]")
-        sys.exit(1)
-
-    ctx.obj = agent_config
-
-@cli.command()
-@click.argument('request', required=False)
-@click.option('--interactive', '-i', is_flag=True, help='Interactive chat mode')
-@click.option('--context-file', help='Load context from file')
-@click.option('--save-session', help='Save session to file')
-@click.pass_obj
-def chat(config, request, interactive, context_file, save_session):
-    """Chat with the AI agent"""
-
-    async def run_chat():
-        agent = AdvancedAICodingAgent(config)
-
-        # Load context if provided
-        context = {}
-        if context_file and os.path.exists(context_file):
-            try:
-                with open(context_file, 'r') as f:
-                    context = json.load(f)
-                console.print(f"[green]Loaded context from {context_file}[/green]")
-            except Exception as e:
-                console.print(f"[yellow]Warning: Could not load context file: {e}[/yellow]")
-
-        if interactive or not request:
-            console.print(Panel(
-                "[bold blue]Advanced AI Coding Agent[/bold blue]\n"
-                "Sophisticated AI assistant with multi-modal capabilities\n"
-                "Type 'help' for commands, 'quit' to exit",
-                title="Welcome",
-                border_style="blue"
-            ))
-
-            while True:
-                try:
-                    user_input = input("\n🤖 > ").strip()
-
-                    if user_input.lower() in ['quit', 'exit', 'q']:
-                        console.print("[blue]Goodbye! 👋[/blue]")
-                        break
-                    elif user_input.lower() == 'help':
-                        show_help()
-                        continue
-                    elif user_input.lower() == 'status':
-                        status = await agent.get_project_status()
-                        console.print(Panel(
-                            f"Session: {status['session_id']}\n"
-                            f"Workspace: {status['workspace']}\n"
-                            f"Conversations: {status['conversation_length']}\n"
-                            f"Success Rate: {status['performance_metrics']['success_rate']:.1%}\n"
-                            f"Avg Response Time: {status['performance_metrics']['average_response_time']:.2f}s",
-                            title="Agent Status",
-                            border_style="green"
-                        ))
-                        continue
-                    elif user_input.lower() == 'summary':
-                        summary = agent.get_conversation_summary()
-                        console.print(Panel(summary, title="Conversation Summary", border_style="cyan"))
-                        continue
-                    elif not user_input:
-                        continue
-
-                    # Process request
-                    with console.status("[bold green]Processing request..."):
-                        result = await agent.process_request(user_input, context)
-
-                    # Display response
-                    if result.get('error'):
-                        console.print(f"[red]Error: {result['error']}[/red]")
-                    else:
-                        console.print(Panel(
-                            result['response'],
-                            title=f"Response (Duration: {result['duration']:.2f}s)",
-                            border_style="green"
-                        ))
-
-                        # Show execution summary if verbose
-                        if config.verbose_output:
-                            execution = result['execution_results']
-                            console.print(f"[dim]Execution: {execution['overall_status']} | "
-                                        f"Tasks: {len(execution.get('tasks', {}))} | "
-                                        f"Success Rate: {agent.performance_metrics['success_rate']:.1%}[/dim]")
-
-                except KeyboardInterrupt:
-                    console.print("\n[yellow]Interrupted by user[/yellow]")
-                    break
-                except Exception as e:
-                    console.print(f"[red]Unexpected error: {e}[/red]")
-                    if config.verbose_output:
-                        console.print(f"[dim]{traceback.format_exc()}[/dim]")
-        else:
-            # Single request mode
-            try:
-                with console.status("[bold green]Processing request..."):
-                    result = await agent.process_request(request, context)
-
-                if result.get('error'):
-                    console.print(f"[red]Error: {result['error']}[/red]")
-                    sys.exit(1)
-                else:
-                    console.print(result['response'])
-
-            except Exception as e:
-                console.print(f"[red]Error: {e}[/red]")
-                sys.exit(1)
-
-        # Save session if requested
-        if save_session:
-            try:
-                session_data = {
-                    "session_id": agent.session_id,
-                    "conversation_history": agent.conversation_history,
-                    "performance_metrics": agent.performance_metrics,
-                    "timestamp": datetime.now().isoformat()
-                }
-
-                with open(save_session, 'w') as f:
-                    json.dump(session_data, f, indent=2, default=str)
-
-                console.print(f"[green]Session saved to {save_session}[/green]")
-            except Exception as e:
-                console.print(f"[yellow]Warning: Could not save session: {e}[/yellow]")
-
-    # Run async chat
-    asyncio.run(run_chat())
-
-def show_help():
-    """Show help information"""
-    help_text = """
-[bold blue]Available Commands:[/bold blue]
-
-[green]Chat Commands:[/green]
-• help - Show this help message
-• status - Show agent status and metrics
-• summary - Show conversation summary
-• quit/exit/q - Exit the application
-
-[green]Special Features:[/green]
-• Multi-modal context understanding
-• Advanced reasoning and planning
-• Real-time code analysis
-• Intelligent task decomposition
-• Error handling and recovery
-• Learning from feedback
-
-[green]Example Requests:[/green]
-• "Analyze my Python project and suggest improvements"
-• "Create a REST API with authentication using FastAPI"
-• "Debug this error: ImportError: No module named 'requests'"
-• "Refactor my code to follow best practices"
-• "Generate comprehensive tests for my application"
-• "Create documentation for my project"
-
-[green]Tips:[/green]
-• Be specific about your requirements
-• Mention technologies and frameworks you prefer
-• Ask for explanations if you need more detail
-• Provide context about your project when relevant
-"""
-    console.print(Panel(help_text, title="Help", border_style="blue"))
-
-@cli.command()
-@click.option('--output', '-o', default='project_analysis.json', help='Output file')
-@click.option('--format', 'output_format', default='json',
-              type=click.Choice(['json', 'markdown', 'html']), help='Output format')
-@click.pass_obj
-def analyze(config, output, output_format):
-    """Analyze current project comprehensively"""
-
-    async def run_analysis():
-        agent = AdvancedAICodingAgent(config)
-
-        console.print("[blue]🔍 Starting comprehensive project analysis...[/blue]")
-
-        # Analyze project structure
-        fs_tool = agent.tools["filesystem"]
-
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            console=console
-        ) as progress:
-
-            task = progress.add_task("Analyzing project structure...", total=100)
-
-            # Get project files
-            files_result = await fs_tool.execute("list", pattern="*", recursive=True)
-            progress.update(task, advance=25)
-
-            # Analyze key files
-            analysis_results = {}
-            python_files = [f for f in files_result["files"] if f["path"].endswith('.py')]
-
-            for i, file_info in enumerate(python_files[:10]):  # Limit to first 10 files
-                file_analysis = await fs_tool.execute("analyze", path=file_info["path"])
-                analysis_results[file_info["path"]] = file_analysis
-                progress.update(task, advance=5)
-
-            progress.update(task, completed=100)
-
-        # Generate comprehensive report
-        report = {
-            "analysis_timestamp": datetime.now().isoformat(),
-            "project_overview": {
-                "workspace": config.workspace_dir,
-                "total_files": files_result["count"],
-                "python_files": len(python_files)
-            },
-            "file_analyses": analysis_results,
-            "recommendations": [
-                "Consider adding type hints to improve code clarity",
-                "Implement comprehensive test coverage",
-                "Add docstrings to functions and classes",
-                "Consider using a linter like pylint or flake8"
+                elif isinstance(node, ast.Import):
+                    for alias in node.names:
+                        symbols.append({
+                            'type': 'import',
+                            'name': alias.name,
+                            'line': node.lineno,
+                            'file': str(file_path)
+                        })
+                elif isinstance(node, ast.ImportFrom):
+                    if node.module:
+                        symbols.append({
+                            'type': 'import_from',
+                            'module': node.module,
+                            'names': [alias.name for alias in node.names],
+                            'line': node.lineno,
+                            'file': str(file_path)
+                        })
+        except SyntaxError:
+            # Fallback to regex-based extraction
+            symbols = self._extract_generic_symbols(content, file_path)
+
+        return symbols
+
+    def _extract_javascript_symbols(self, content: str, file_path: Path) -> List[Dict[str, Any]]:
+        """Extract JavaScript/TypeScript symbols using regex"""
+        symbols = []
+        lines = content.split('\n')
+
+        for i, line in enumerate(lines, 1):
+            # Function declarations
+            func_match = re.search(r'function\s+(\w+)\s*\(([^)]*)\)', line)
+            if func_match:
+                symbols.append({
+                    'type': 'function',
+                    'name': func_match.group(1),
+                    'line': i,
+                    'file': str(file_path),
+                    'args': [arg.strip() for arg in func_match.group(2).split(',') if arg.strip()]
+                })
+
+            # Arrow functions
+            arrow_match = re.search(r'const\s+(\w+)\s*=\s*\([^)]*\)\s*=>', line)
+            if arrow_match:
+                symbols.append({
+                    'type': 'function',
+                    'name': arrow_match.group(1),
+                    'line': i,
+                    'file': str(file_path)
+                })
+
+            # Class declarations
+            class_match = re.search(r'class\s+(\w+)', line)
+            if class_match:
+                symbols.append({
+                    'type': 'class',
+                    'name': class_match.group(1),
+                    'line': i,
+                    'file': str(file_path)
+                })
+
+            # Imports
+            import_match = re.search(r'import\s+.*?from\s+[\'"]([^\'"]+)[\'"]', line)
+            if import_match:
+                symbols.append({
+                    'type': 'import',
+                    'module': import_match.group(1),
+                    'line': i,
+                    'file': str(file_path)
+                })
+
+        return symbols
+
+    def _extract_generic_symbols(self, content: str, file_path: Path) -> List[Dict[str, Any]]:
+        """Generic symbol extraction using regex patterns"""
+        symbols = []
+        lines = content.split('\n')
+
+        for i, line in enumerate(lines, 1):
+            # Generic function patterns
+            func_patterns = [
+                r'def\s+(\w+)\s*\(',  # Python
+                r'function\s+(\w+)\s*\(',  # JavaScript
+                r'(\w+)\s*\([^)]*\)\s*{',  # C-style
+                r'public\s+\w+\s+(\w+)\s*\(',  # Java/C#
             ]
+
+            for pattern in func_patterns:
+                match = re.search(pattern, line)
+                if match:
+                    symbols.append({
+                        'type': 'function',
+                        'name': match.group(1),
+                        'line': i,
+                        'file': str(file_path)
+                    })
+                    break
+
+        return symbols
+
+    def _extract_keywords(self, request: str) -> List[str]:
+        """Extract relevant keywords from information request"""
+        # Remove common words and extract meaningful terms
+        stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'must', 'can', 'about', 'how', 'what', 'where', 'when', 'why', 'which', 'who', 'find', 'show', 'get', 'information', 'code', 'function', 'class', 'method'}
+
+        words = re.findall(r'\b\w+\b', request.lower())
+        keywords = [word for word in words if word not in stop_words and len(word) > 2]
+
+        return keywords
+
+    def _search_symbols(self, keyword: str) -> List[Dict[str, Any]]:
+        """Search for symbols matching keyword"""
+        matching_symbols = []
+
+        for file_path, symbols in self.symbol_index.items():
+            for symbol in symbols:
+                if keyword.lower() in symbol['name'].lower():
+                    matching_symbols.append(symbol)
+
+        return matching_symbols
+
+    def _search_file_contents(self, keyword: str) -> List[str]:
+        """Search for keyword in file contents"""
+        matching_files = []
+
+        for file_path, content in self.file_cache.items():
+            if keyword.lower() in content.lower():
+                matching_files.append(str(file_path))
+
+        return matching_files
+
+    def _rank_results(self, files: List[str], symbols: List[Dict[str, Any]], request: str) -> List[Dict[str, Any]]:
+        """Rank and format results based on relevance"""
+        results = []
+
+        # Add symbol results
+        for symbol in symbols[:10]:  # Limit to top 10
+            results.append({
+                'type': 'symbol',
+                'name': symbol['name'],
+                'symbol_type': symbol['type'],
+                'file': symbol['file'],
+                'line': symbol.get('line', 0),
+                'relevance': self._calculate_relevance(symbol['name'], request)
+            })
+
+        # Add file results
+        unique_files = list(set(files))[:5]  # Limit to top 5 files
+        for file_path in unique_files:
+            results.append({
+                'type': 'file',
+                'file': file_path,
+                'relevance': self._calculate_relevance(Path(file_path).name, request)
+            })
+
+        # Sort by relevance
+        results.sort(key=lambda x: x['relevance'], reverse=True)
+
+        return results
+
+    def _calculate_relevance(self, text: str, request: str) -> float:
+        """Calculate relevance score between text and request"""
+        text_lower = text.lower()
+        request_lower = request.lower()
+
+        # Simple relevance scoring
+        score = 0.0
+
+        # Exact match bonus
+        if text_lower in request_lower or request_lower in text_lower:
+            score += 1.0
+
+        # Word overlap
+        text_words = set(re.findall(r'\b\w+\b', text_lower))
+        request_words = set(re.findall(r'\b\w+\b', request_lower))
+
+        if text_words and request_words:
+            overlap = len(text_words.intersection(request_words))
+            score += overlap / len(text_words.union(request_words))
+
+        return score
+
+class AdvancedFileManager(FileManager):
+    """Enhanced file manager with advanced features"""
+
+    def __init__(self, workspace_root: str):
+        super().__init__(workspace_root)
+        self.truncation_cache = {}
+        self.next_reference_id = 1
+
+    def view_file_advanced(self, path: str, view_range: Optional[List[int]] = None,
+                          search_query_regex: Optional[str] = None,
+                          case_sensitive: bool = False,
+                          context_lines_before: int = 5,
+                          context_lines_after: int = 5) -> Dict[str, Any]:
+        """Advanced file viewing with regex search and range support"""
+        try:
+            file_path = self.workspace_root / path
+            if not file_path.exists():
+                return {"error": f"File not found: {path}"}
+
+            if file_path.is_dir():
+                return self._list_directory(file_path)
+
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                lines = f.readlines()
+
+            total_lines = len(lines)
+
+            # Apply view range if specified
+            if view_range:
+                start, end = view_range
+                if end == -1:
+                    end = total_lines
+                start = max(1, start)
+                end = min(total_lines, end)
+                lines = lines[start-1:end]
+                line_offset = start - 1
+            else:
+                line_offset = 0
+
+            # Apply regex search if specified
+            if search_query_regex:
+                return self._search_with_context(lines, search_query_regex, path,
+                                               case_sensitive, context_lines_before,
+                                               context_lines_after, line_offset)
+
+            # Format content with line numbers
+            content = ''.join(f"{i+1+line_offset:4d}: {line}" for i, line in enumerate(lines))
+
+            # Handle truncation for large files
+            if len(content) > 50000:  # 50KB limit
+                reference_id = f"ref_{self.next_reference_id}"
+                self.next_reference_id += 1
+                self.truncation_cache[reference_id] = {
+                    'content': content,
+                    'path': path,
+                    'total_lines': total_lines
+                }
+
+                truncated_content = content[:50000]
+                truncated_content += f"\n\n<response clipped>\nContent truncated. Reference ID: {reference_id}\nTotal lines: {total_lines}\nUse view-range-untruncated or search-untruncated tools to see more."
+
+                return {
+                    "content": truncated_content,
+                    "total_lines": total_lines,
+                    "truncated": True,
+                    "reference_id": reference_id
+                }
+
+            return {"content": content, "total_lines": total_lines}
+
+        except Exception as e:
+            return {"error": str(e)}
+
+    def _search_with_context(self, lines: List[str], pattern: str, file_path: str,
+                           case_sensitive: bool, context_before: int, context_after: int,
+                           line_offset: int = 0) -> Dict[str, Any]:
+        """Search with context lines around matches"""
+        try:
+            flags = 0 if case_sensitive else re.IGNORECASE
+            regex = re.compile(pattern, flags)
+
+            matches = []
+            match_lines = set()
+
+            # Find all matching lines
+            for i, line in enumerate(lines):
+                if regex.search(line):
+                    match_lines.add(i)
+
+            if not match_lines:
+                return {
+                    "content": f"No matches found for pattern: {pattern}",
+                    "matches": 0,
+                    "pattern": pattern
+                }
+
+            # Build context blocks
+            context_blocks = []
+            processed_lines = set()
+
+            for match_line in sorted(match_lines):
+                if match_line in processed_lines:
+                    continue
+
+                # Determine context range
+                start = max(0, match_line - context_before)
+                end = min(len(lines), match_line + context_after + 1)
+
+                # Collect context lines
+                context_lines = []
+                for i in range(start, end):
+                    line_num = i + 1 + line_offset
+                    marker = ">>> " if i == match_line else "    "
+                    context_lines.append(f"{marker}{line_num:4d}: {lines[i]}")
+                    processed_lines.add(i)
+
+                context_blocks.append(''.join(context_lines))
+
+            content = "\n...\n".join(context_blocks)
+
+            return {
+                "content": content,
+                "matches": len(match_lines),
+                "pattern": pattern,
+                "file": file_path
+            }
+
+        except re.error as e:
+            return {"error": f"Invalid regex pattern: {e}"}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def view_range_untruncated(self, reference_id: str, start_line: int, end_line: int) -> Dict[str, Any]:
+        """View specific range from truncated content"""
+        if reference_id not in self.truncation_cache:
+            return {"error": f"Reference ID {reference_id} not found"}
+
+        try:
+            cached_data = self.truncation_cache[reference_id]
+            full_content = cached_data['content']
+
+            # Split into lines and extract range
+            lines = full_content.split('\n')
+
+            if start_line < 1 or end_line > len(lines) or start_line > end_line:
+                return {"error": f"Invalid line range: {start_line}-{end_line}"}
+
+            selected_lines = lines[start_line-1:end_line]
+            content = '\n'.join(selected_lines)
+
+            return {
+                "content": content,
+                "range": f"{start_line}-{end_line}",
+                "total_lines": cached_data['total_lines']
+            }
+
+        except Exception as e:
+            return {"error": str(e)}
+
+    def search_untruncated(self, reference_id: str, search_term: str, context_lines: int = 2) -> Dict[str, Any]:
+        """Search within truncated content"""
+        if reference_id not in self.truncation_cache:
+            return {"error": f"Reference ID {reference_id} not found"}
+
+        try:
+            cached_data = self.truncation_cache[reference_id]
+            full_content = cached_data['content']
+            lines = full_content.split('\n')
+
+            matches = []
+            for i, line in enumerate(lines):
+                if search_term.lower() in line.lower():
+                    # Get context
+                    start = max(0, i - context_lines)
+                    end = min(len(lines), i + context_lines + 1)
+
+                    context_block = []
+                    for j in range(start, end):
+                        marker = ">>> " if j == i else "    "
+                        context_block.append(f"{marker}{j+1:4d}: {lines[j]}")
+
+                    matches.append('\n'.join(context_block))
+
+            if matches:
+                content = "\n...\n".join(matches)
+            else:
+                content = f"No matches found for: {search_term}"
+
+            return {
+                "content": content,
+                "matches": len(matches),
+                "search_term": search_term
+            }
+
+        except Exception as e:
+            return {"error": str(e)}
+
+    def insert_content(self, path: str, insert_line: int, new_content: str) -> Dict[str, Any]:
+        """Insert content at specific line"""
+        try:
+            file_path = self.workspace_root / path
+            if not file_path.exists():
+                return {"error": f"File not found: {path}"}
+
+            with open(file_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+
+            if insert_line < 0 or insert_line > len(lines):
+                return {"error": f"Invalid insert line: {insert_line}"}
+
+            # Insert new content
+            new_lines = new_content.splitlines(keepends=True)
+            if new_lines and not new_lines[-1].endswith('\n'):
+                new_lines[-1] += '\n'
+
+            result_lines = lines[:insert_line] + new_lines + lines[insert_line:]
+
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.writelines(result_lines)
+
+            return {
+                "success": True,
+                "message": f"Content inserted at line {insert_line} in {path}",
+                "lines_added": len(new_lines)
+            }
+
+        except Exception as e:
+            return {"error": str(e)}
+
+class AdvancedProcessManager(ProcessManager):
+    """Enhanced process manager with terminal reading capabilities"""
+
+    def __init__(self):
+        super().__init__()
+        self.terminal_history = {}
+
+    def read_terminal(self, only_selected: bool = False) -> Dict[str, Any]:
+        """Read from the active terminal"""
+        try:
+            # In a real implementation, this would interface with the actual terminal
+            # For this replica, we'll simulate terminal reading from the most recent process
+
+            if not self.processes:
+                return {"content": "No active terminal sessions"}
+
+            # Get the most recent terminal
+            latest_terminal_id = max(self.processes.keys())
+
+            if only_selected:
+                # Simulate selected text (in real implementation, would get actual selection)
+                return {"content": "Selected text simulation - not implemented in replica"}
+
+            # Return full terminal output
+            output = ''.join(self.process_outputs.get(latest_terminal_id, []))
+
+            return {
+                "content": output,
+                "terminal_id": latest_terminal_id,
+                "timestamp": datetime.now().isoformat()
+            }
+
+        except Exception as e:
+            return {"error": str(e)}
+
+    def get_terminal_history(self, terminal_id: int) -> Dict[str, Any]:
+        """Get complete history for a terminal session"""
+        if terminal_id not in self.process_outputs:
+            return {"error": f"Terminal {terminal_id} not found"}
+
+        history = self.process_outputs[terminal_id]
+        return {
+            "history": history,
+            "total_lines": len(history),
+            "terminal_id": terminal_id
         }
 
-        # Save report
-        if output_format == 'json':
-            with open(output, 'w') as f:
-                json.dump(report, f, indent=2, default=str)
-        elif output_format == 'markdown':
-            markdown_content = generate_markdown_report(report)
-            with open(output.replace('.json', '.md'), 'w') as f:
-                f.write(markdown_content)
+class StructuredToolCallParser:
+    """Advanced tool call parsing and execution"""
 
-        console.print(f"[green]✅ Analysis complete! Report saved to {output}[/green]")
+    def __init__(self, agent):
+        self.agent = agent
+        self.tool_registry = self._build_tool_registry()
 
-        # Show summary
-        console.print(Panel(
-            f"Files analyzed: {len(analysis_results)}\n"
-            f"Total files: {files_result['count']}\n"
-            f"Python files: {len(python_files)}\n"
-            f"Recommendations: {len(report['recommendations'])}",
-            title="Analysis Summary",
-            border_style="green"
-        ))
+    def _build_tool_registry(self) -> Dict[str, callable]:
+        """Build registry of available tools"""
+        return {
+            # File operations
+            'view_file': self.agent.view_file,
+            'save_file': self.agent.save_file,
+            'edit_file': self.agent.edit_file,
+            'remove_files': self.agent.file_manager.remove_files,
+            'analyze_code': self.agent.file_manager.analyze_code,
 
-    asyncio.run(run_analysis())
+            # Web operations
+            'web_search': self.agent.web_search,
+            'web_fetch': self.agent.web_fetch,
+            'open_browser': self.agent.web_manager.open_browser,
 
-def generate_markdown_report(report: Dict[str, Any]) -> str:
-    """Generate markdown analysis report"""
-    return f"""# Project Analysis Report
+            # Process operations
+            'launch_process': self.agent.launch_process,
+            'read_process': self.agent.process_manager.read_process,
+            'write_process': self.agent.process_manager.write_process,
+            'kill_process': self.agent.process_manager.kill_process,
+            'list_processes': self.agent.process_manager.list_processes,
+            'read_terminal': getattr(self.agent.process_manager, 'read_terminal', None),
 
-**Generated:** {report['analysis_timestamp']}
+            # Task management
+            'add_tasks': self.agent.add_tasks,
+            'update_tasks': self.agent.update_tasks,
+            'view_tasklist': self.agent.view_tasklist,
+            'reorganize_tasklist': self.agent.task_manager.reorganize_tasklist,
 
-## Project Overview
-- **Workspace:** {report['project_overview']['workspace']}
-- **Total Files:** {report['project_overview']['total_files']}
-- **Python Files:** {report['project_overview']['python_files']}
+            # Memory operations
+            'remember': self.agent.remember,
+            'search_memories': self.agent.search_memories,
 
-## File Analysis Summary
-{len(report['file_analyses'])} files were analyzed in detail.
+            # Advanced features
+            'render_mermaid': getattr(self.agent, 'render_mermaid', None),
+            'codebase_retrieval': getattr(self.agent, 'codebase_retrieval', None),
+            'get_diagnostics': self.agent.get_diagnostics,
+            'install_package': self.agent.install_package,
+        }
 
-## Recommendations
-{chr(10).join(f"- {rec}" for rec in report['recommendations'])}
+    def parse_and_execute_tools(self, response_text: str, user_input: str) -> str:
+        """Parse structured tool calls from response and execute them"""
+        try:
+            # Look for structured tool calls in the response
+            tool_calls = self._extract_tool_calls(response_text)
 
----
-*Generated by Advanced AI Coding Agent*
+            if not tool_calls:
+                # Fallback to pattern-based parsing
+                return self._pattern_based_execution(response_text, user_input)
+
+            # Execute structured tool calls
+            results = []
+            for tool_call in tool_calls:
+                result = self._execute_tool_call(tool_call)
+                results.append(result)
+
+            # Format results
+            if results:
+                formatted_results = self._format_tool_results(results)
+                return f"{response_text}\n\n{formatted_results}"
+
+            return response_text
+
+        except Exception as e:
+            logger.error(f"Tool call execution failed: {e}")
+            return f"{response_text}\n\nTool execution error: {str(e)}"
+
+    def _extract_tool_calls(self, text: str) -> List[Dict[str, Any]]:
+        """Extract structured tool calls from text"""
+        tool_calls = []
+
+        # Look for XML-style tool calls
+        pattern = r'<tool_call name="([^"]+)"(?:\s+([^>]*))?>([^<]*)</tool_call>'
+        matches = re.findall(pattern, text, re.DOTALL)
+
+        for match in matches:
+            tool_name, params_str, content = match
+
+            # Parse parameters
+            params = {}
+            if params_str:
+                param_matches = re.findall(r'(\w+)="([^"]*)"', params_str)
+                params.update(param_matches)
+
+            if content.strip():
+                params['content'] = content.strip()
+
+            tool_calls.append({
+                'name': tool_name,
+                'parameters': params
+            })
+
+        return tool_calls
+
+    def _execute_tool_call(self, tool_call: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute a single tool call"""
+        tool_name = tool_call['name']
+        params = tool_call['parameters']
+
+        if tool_name not in self.tool_registry:
+            return {"error": f"Unknown tool: {tool_name}"}
+
+        tool_func = self.tool_registry[tool_name]
+        if tool_func is None:
+            return {"error": f"Tool {tool_name} not available"}
+
+        try:
+            # Execute the tool with parameters
+            result = tool_func(**params)
+            return {"tool": tool_name, "result": result, "success": True}
+        except Exception as e:
+            return {"tool": tool_name, "error": str(e), "success": False}
+
+    def _format_tool_results(self, results: List[Dict[str, Any]]) -> str:
+        """Format tool execution results"""
+        formatted = ["Tool Execution Results:"]
+
+        for i, result in enumerate(results, 1):
+            tool_name = result.get('tool', 'unknown')
+
+            if result.get('success'):
+                formatted.append(f"\n{i}. {tool_name}: ✅ Success")
+                if 'result' in result and result['result']:
+                    # Format result based on type
+                    res = result['result']
+                    if isinstance(res, dict):
+                        if 'content' in res:
+                            formatted.append(f"   Content: {res['content'][:200]}...")
+                        elif 'message' in res:
+                            formatted.append(f"   {res['message']}")
+                        else:
+                            formatted.append(f"   {res}")
+                    else:
+                        formatted.append(f"   {str(res)[:200]}...")
+            else:
+                formatted.append(f"\n{i}. {tool_name}: ❌ Error")
+                formatted.append(f"   {result.get('error', 'Unknown error')}")
+
+        return '\n'.join(formatted)
+
+    def _pattern_based_execution(self, response_text: str, user_input: str) -> str:
+        """Fallback pattern-based tool execution"""
+        # Enhanced pattern matching for common requests
+
+        # File viewing patterns
+        file_patterns = [
+            r'(?:show|view|display|read)\s+(?:me\s+)?(?:the\s+)?(?:contents?\s+of\s+)?["\']?([^"\']+\.[a-zA-Z]+)["\']?',
+            r'(?:open|check)\s+["\']?([^"\']+\.[a-zA-Z]+)["\']?',
+            r'["\']([^"\']+\.[a-zA-Z]+)["\']'
+        ]
+
+        for pattern in file_patterns:
+            match = re.search(pattern, user_input, re.IGNORECASE)
+            if match:
+                file_path = match.group(1)
+                result = self.agent.view_file(file_path)
+                if 'content' in result:
+                    return f"{response_text}\n\n**File: {file_path}**\n```\n{result['content'][:1000]}...\n```"
+
+        # Web search patterns
+        search_patterns = [
+            r'search\s+(?:the\s+)?web\s+for\s+["\']?([^"\']+)["\']?',
+            r'look\s+up\s+["\']?([^"\']+)["\']?',
+            r'find\s+information\s+about\s+["\']?([^"\']+)["\']?'
+        ]
+
+        for pattern in search_patterns:
+            match = re.search(pattern, user_input, re.IGNORECASE)
+            if match:
+                query = match.group(1)
+                results = self.agent.web_search(query, 3)
+                if results:
+                    search_results = "\n".join([f"• {r['title']}: {r['url']}" for r in results])
+                    return f"{response_text}\n\n**Web Search Results for '{query}':**\n{search_results}"
+
+        # Task management patterns
+        if re.search(r'(?:create|add|make)\s+(?:a\s+)?task', user_input, re.IGNORECASE):
+            task_match = re.search(r'task\s+(?:to\s+|for\s+)?["\']?([^"\']+)["\']?', user_input, re.IGNORECASE)
+            if task_match:
+                task_desc = task_match.group(1)
+                result = self.agent.add_tasks([{"name": task_desc, "description": f"Task created from: {user_input}"}])
+                return f"{response_text}\n\n**Task Created:** {task_desc}"
+
+        if re.search(r'(?:show|view|list)\s+tasks?', user_input, re.IGNORECASE):
+            tasklist = self.agent.view_tasklist()
+            return f"{response_text}\n\n**Current Tasks:**\n{tasklist}"
+
+        # Memory patterns
+        remember_match = re.search(r'remember\s+(?:that\s+)?["\']?([^"\']+)["\']?', user_input, re.IGNORECASE)
+        if remember_match:
+            memory_content = remember_match.group(1)
+            result = self.agent.remember(memory_content)
+            return f"{response_text}\n\n**Remembered:** {memory_content}"
+
+        return response_text
+
+class AugmentAgent:
+    """Main Augment Agent class - comprehensive AI assistant replica"""
+
+    def __init__(self, workspace_root: str = None):
+        # Initialize workspace
+        self.workspace_root = workspace_root or os.getcwd()
+
+        # Initialize Gemini
+        api_key = os.getenv('GEMINI_API_KEY')
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY environment variable is required")
+
+        genai.configure(api_key=api_key)
+        self.model = genai.GenerativeModel('gemini-2.0-flash-exp')
+
+        # Initialize enhanced managers
+        self.file_manager = AdvancedFileManager(self.workspace_root)
+        self.process_manager = AdvancedProcessManager()
+        self.web_manager = WebManager()
+        self.task_manager = TaskManager()
+        self.memory_manager = MemoryManager()
+        self.diagnostic_manager = DiagnosticManager(self.file_manager)
+        self.package_manager = PackageManager(self.workspace_root)
+
+        # Initialize advanced features
+        self.mermaid_renderer = MermaidRenderer()
+        self.codebase_analyzer = CodebaseAnalyzer(self.workspace_root)
+        self.tool_parser = StructuredToolCallParser(self)
+
+        # Agent identity and system prompt
+        self.identity = """You are Augment Agent developed by Augment Code, an agentic coding AI assistant
+        based on the Claude Sonnet 4 model by Anthropic, with access to the developer's codebase through
+        Augment's world-leading context engine and integrations. You have comprehensive capabilities for
+        file operations, code analysis, web search, process management, task organization, and more."""
+
+        self.system_prompt = """You are a helpful, professional AI coding assistant. You:
+        - Always ask for permission before potentially damaging actions
+        - Use appropriate package managers instead of manually editing config files
+        - Focus on doing exactly what the user asks
+        - Suggest testing code changes
+        - Are conservative with code changes and respect the existing codebase
+        - Provide clear, actionable responses
+        - Use proper error handling and logging
+        """
+
+    def process_command(self, user_input: str) -> str:
+        """Process user command and return response"""
+        try:
+            # Check for direct tool execution patterns first
+            direct_result = self._check_direct_execution(user_input)
+            if direct_result:
+                return direct_result
+
+            # Prepare context with available tools and current state
+            context = self._build_context()
+
+            # Enhanced system prompt with tool information
+            enhanced_system_prompt = f"""{self.system_prompt}
+
+Available Tools:
+- File operations: view_file, save_file, edit_file, analyze_code
+- Web operations: web_search, web_fetch, open_browser
+- Process management: launch_process, read_terminal, list_processes
+- Task management: add_tasks, update_tasks, view_tasklist
+- Memory operations: remember, search_memories
+- Advanced features: render_mermaid, codebase_retrieval, get_diagnostics
+- Package management: install_package
+
+When you need to use tools, you can either:
+1. Describe what you want to do and I'll execute the appropriate tools
+2. Use structured tool calls: <tool_call name="tool_name" param="value">content</tool_call>
 """
 
-@cli.command()
-@click.pass_obj
-def status(config):
-    """Show agent configuration and status"""
+            # Create full prompt
+            full_prompt = f"{enhanced_system_prompt}\n\nContext:\n{context}\n\nUser: {user_input}\n\nAssistant:"
 
-    console.print(Panel(
-        f"[bold blue]Advanced AI Coding Agent Configuration[/bold blue]\n\n"
-        f"🏠 Workspace: {config.workspace_dir}\n"
-        f"🤖 Primary Model: {config.primary_model}\n"
-        f"🔑 API Keys: {', '.join(config.api_keys.keys())}\n"
-        f"⚡ Max Concurrent Tasks: {config.max_concurrent_tasks}\n"
-        f"💾 Caching: {'✅ Enabled' if config.enable_caching else '❌ Disabled'}\n"
-        f"🧠 Learning: {'✅ Enabled' if config.enable_learning else '❌ Disabled'}\n"
-        f"🔒 Security Checks: {'✅ Enabled' if config.enable_security_checks else '❌ Disabled'}\n"
-        f"🎨 Theme: {config.theme}\n"
-        f"📊 Verbose Output: {'✅ Enabled' if config.verbose_output else '❌ Disabled'}\n\n"
-        f"🚀 Ready to assist with advanced AI-powered development!",
-        title="Agent Status",
-        border_style="blue"
-    ))
+            # Generate response
+            response = self.model.generate_content(full_prompt)
+
+            # Process tool calls using advanced parser
+            processed_response = self.tool_parser.parse_and_execute_tools(response.text, user_input)
+
+            return processed_response
+
+        except Exception as e:
+            logger.error(f"Error processing command: {e}")
+            return f"I encountered an error: {str(e)}. Please try rephrasing your request."
+
+    def _check_direct_execution(self, user_input: str) -> Optional[str]:
+        """Check for commands that should be executed directly without AI processing"""
+        user_lower = user_input.lower().strip()
+
+        # Direct file viewing
+        if user_lower.startswith(('show ', 'view ', 'cat ', 'display ')):
+            # Extract file path
+            words = user_input.split()
+            for word in words[1:]:  # Skip the command word
+                if '.' in word and not word.startswith('-'):
+                    result = self.view_file(word)
+                    if 'content' in result:
+                        return f"**File: {word}**\n\n<augment_code_snippet path=\"{word}\" mode=\"EXCERPT\">\n````\n{result['content'][:2000]}...\n````\n</augment_code_snippet>"
+                    else:
+                        return f"Error viewing file {word}: {result.get('error', 'Unknown error')}"
+
+        # Direct task list viewing
+        if user_lower in ['tasks', 'show tasks', 'list tasks', 'view tasks']:
+            return self.view_tasklist()
+
+        # Direct memory search
+        if user_lower.startswith('memories ') or user_lower.startswith('search memories '):
+            query = user_input.split(' ', 1)[1] if ' ' in user_input else ''
+            if query:
+                memories = self.search_memories(query)
+                if memories:
+                    result = "**Found Memories:**\n"
+                    for mem in memories[:5]:
+                        result += f"- {mem['content'][:100]}...\n"
+                    return result
+                else:
+                    return f"No memories found for: {query}"
+
+        return None
+
+    def _build_context(self) -> str:
+        """Build context information for the AI model"""
+        context_parts = []
+
+        # Workspace info
+        context_parts.append(f"Workspace: {self.workspace_root}")
+
+        # Available package managers
+        managers = self.package_manager.detect_package_manager()
+        if managers:
+            context_parts.append(f"Package managers: {managers}")
+
+        # Active processes
+        processes = self.process_manager.list_processes()
+        if processes:
+            context_parts.append(f"Active processes: {len(processes)}")
+
+        # Current tasks
+        if self.task_manager.tasks:
+            context_parts.append(f"Tasks: {len(self.task_manager.tasks)} defined")
+
+        # Recent memories
+        recent_memories = list(self.memory_manager.memories.values())[-3:]
+        if recent_memories:
+            context_parts.append("Recent memories:")
+            for memory in recent_memories:
+                context_parts.append(f"- {memory.content}")
+
+        return "\n".join(context_parts)
+
+    def _process_tool_calls(self, response_text: str, user_input: str) -> str:
+        """Process any tool calls mentioned in the response"""
+        # This is a simplified implementation
+        # In a full implementation, you would parse structured tool calls
+
+        # Check for common patterns and execute appropriate tools
+        if "view file" in user_input.lower() or "show me" in user_input.lower():
+            # Extract file path if mentioned
+            words = user_input.split()
+            for word in words:
+                if '.' in word and '/' in word:
+                    result = self.file_manager.view_file(word)
+                    if 'content' in result:
+                        return f"{response_text}\n\nFile content:\n```\n{result['content']}\n```"
+
+        if "search" in user_input.lower() and "web" in user_input.lower():
+            # Extract search query
+            query = user_input.replace("search", "").replace("web", "").strip()
+            if query:
+                results = self.web_manager.web_search(query)
+                search_results = "\n".join([f"- {r['title']}: {r['url']}" for r in results[:3]])
+                return f"{response_text}\n\nSearch results:\n{search_results}"
+
+        return response_text
+
+    def run_interactive(self):
+        """Run interactive CLI mode"""
+        print("🤖 Augment Agent Replica - Interactive Mode")
+        print("Developed by Augment Code")
+        print(f"Workspace: {self.workspace_root}")
+        print("Type 'help' for commands, 'quit' to exit\n")
+
+        while True:
+            try:
+                user_input = input("You: ").strip()
+
+                if user_input.lower() in ['quit', 'exit', 'bye']:
+                    print("Goodbye! 👋")
+                    break
+
+                if user_input.lower() == 'help':
+                    self._show_help()
+                    continue
+
+                if not user_input:
+                    continue
+
+                print("🤔 Thinking...")
+                response = self.process_command(user_input)
+                print(f"\n🤖 Agent: {response}\n")
+
+            except KeyboardInterrupt:
+                print("\n\nGoodbye! 👋")
+                break
+            except Exception as e:
+                print(f"Error: {e}")
+
+    def _show_help(self):
+        """Show comprehensive help information"""
+        help_text = """
+🤖 AUGMENT AGENT REPLICA - COMPREHENSIVE CAPABILITIES
+
+📁 FILE OPERATIONS:
+• View files: "show main.py", "view src/utils.py lines 10-50"
+• Edit files: "edit config.py line 25 to change timeout"
+• Create files: "create a new file called helpers.py"
+• Search in files: "search for 'function' in main.py"
+• Code analysis: "analyze the structure of my project"
+
+🌐 WEB & RESEARCH:
+• Web search: "search the web for Python async patterns"
+• Fetch content: "get content from https://example.com/docs"
+• Open browser: "open GitHub repository in browser"
+
+⚙️ PROCESS & TERMINAL:
+• Run commands: "run pytest in terminal"
+• Launch processes: "start the development server"
+• Read terminal: "show me the terminal output"
+• Manage processes: "list running processes"
+
+📋 TASK MANAGEMENT:
+• Create tasks: "add task to implement user auth"
+• View tasks: "show current tasks" or just "tasks"
+• Update tasks: "mark database setup as complete"
+• Organize: "reorganize task priorities"
+
+🧠 MEMORY SYSTEM:
+• Remember: "remember we're using PostgreSQL database"
+• Search memories: "what did I tell you about the API?"
+• Long-term storage: Automatically saves important information
+
+📊 ADVANCED FEATURES:
+• Mermaid diagrams: "create a flowchart showing the user flow"
+• Codebase analysis: "find all functions related to authentication"
+• Diagnostics: "check for errors in my Python files"
+• Package management: "install the requests library"
+
+🔧 DIRECT COMMANDS:
+• tasks - Show task list
+• memories [query] - Search memories
+• show [file] - View file contents
+• help - Show this help
+• quit/exit - Exit agent
+
+💡 TIPS:
+• Be specific about file paths and line numbers
+• Use natural language - I understand context
+• Ask for explanations of code or concepts
+• Request step-by-step guidance for complex tasks
+
+🚀 EXAMPLE WORKFLOWS:
+• "Analyze my codebase and create tasks for refactoring"
+• "Search for React hooks best practices and remember key points"
+• "Show me main.py, then create a test file for it"
+• "Install pytest, run tests, and show me any failures"
+        """
+        print(help_text)
 
 def main():
     """Main entry point"""
+    import argparse
+
+    parser = argparse.ArgumentParser(description='Augment Agent Replica')
+    parser.add_argument('--workspace', '-w', default=None, help='Workspace directory')
+    parser.add_argument('--command', '-c', help='Single command to execute')
+    parser.add_argument('--example', action='store_true', help='Run example usage')
+
+    args = parser.parse_args()
+
     try:
-        cli()
-    except KeyboardInterrupt:
-        console.print("\n[yellow]Interrupted by user[/yellow]")
+        workspace = args.workspace or os.getcwd()
+        agent = AugmentAgent(workspace)
+
+        if args.example:
+            # Run example
+            print("🚀 Augment Agent Replica - Example Usage")
+            result = agent.save_file("test.py", "print('Hello World')")
+            print(f"Created file: {result}")
+
+            content = agent.view_file("test.py")
+            print(f"File content: {content}")
+
+            agent.file_manager.remove_files(["test.py"])
+            print("Example completed!")
+
+        elif args.command:
+            response = agent.process_command(args.command)
+            print(response)
+        else:
+            agent.run_interactive()
+
     except Exception as e:
-        console.print(f"[red]Fatal error: {e}[/red]")
-        sys.exit(1)
+        print(f"Error: {e}")
 
 if __name__ == "__main__":
     main()
 
+    # Tool integration methods for direct access
+    def view_file(self, path: str, **kwargs) -> Dict[str, Any]:
+        """Direct access to file viewing"""
+        return self.file_manager.view_file(path, **kwargs)
+
+    def save_file(self, path: str, content: str) -> Dict[str, Any]:
+        """Direct access to file saving"""
+        return self.file_manager.save_file(path, content)
+
+    def edit_file(self, path: str, old_str: str, new_str: str, start_line: int, end_line: int) -> Dict[str, Any]:
+        """Direct access to file editing"""
+        return self.file_manager.edit_file(path, old_str, new_str, start_line, end_line)
+
+    def web_search(self, query: str, num_results: int = 5) -> List[Dict[str, str]]:
+        """Direct access to web search"""
+        return self.web_manager.web_search(query, num_results)
+
+    def web_fetch(self, url: str) -> str:
+        """Direct access to web content fetching"""
+        return self.web_manager.web_fetch(url)
+
+    def launch_process(self, command: str, cwd: str = None, wait: bool = False, max_wait_seconds: int = 600) -> Dict[str, Any]:
+        """Direct access to process launching"""
+        if cwd is None:
+            cwd = self.workspace_root
+        return self.process_manager.launch_process(command, cwd, wait, max_wait_seconds)
+
+    def add_tasks(self, tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Direct access to task creation"""
+        return self.task_manager.add_tasks(tasks)
+
+    def update_tasks(self, tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Direct access to task updates"""
+        return self.task_manager.update_tasks(tasks)
+
+    def view_tasklist(self) -> str:
+        """Direct access to task list viewing"""
+        return self.task_manager.view_tasklist()
+
+    def remember(self, content: str, tags: List[str] = None) -> Dict[str, Any]:
+        """Direct access to memory storage"""
+        return self.memory_manager.remember(content, tags)
+
+    def search_memories(self, query: str) -> List[Dict[str, Any]]:
+        """Direct access to memory search"""
+        return self.memory_manager.search_memories(query)
+
+    def get_diagnostics(self, file_paths: List[str]) -> Dict[str, Any]:
+        """Direct access to diagnostics"""
+        return self.diagnostic_manager.get_diagnostics(file_paths)
+
+    def install_package(self, package: str, language: str = None) -> Dict[str, Any]:
+        """Direct access to package installation"""
+        return self.package_manager.install_package(package, language)
+
+    # Advanced feature access methods
+    def render_mermaid(self, diagram_definition: str, title: str = "Mermaid Diagram") -> Dict[str, Any]:
+        """Direct access to Mermaid diagram rendering"""
+        return self.mermaid_renderer.render_mermaid(diagram_definition, title)
+
+    def codebase_retrieval(self, information_request: str) -> Dict[str, Any]:
+        """Direct access to codebase analysis and retrieval"""
+        return self.codebase_analyzer.codebase_retrieval(information_request)
+
+    def view_range_untruncated(self, reference_id: str, start_line: int, end_line: int) -> Dict[str, Any]:
+        """Direct access to viewing untruncated content ranges"""
+        return self.file_manager.view_range_untruncated(reference_id, start_line, end_line)
+
+    def search_untruncated(self, reference_id: str, search_term: str, context_lines: int = 2) -> Dict[str, Any]:
+        """Direct access to searching untruncated content"""
+        return self.file_manager.search_untruncated(reference_id, search_term, context_lines)
+
+    def read_terminal(self, only_selected: bool = False) -> Dict[str, Any]:
+        """Direct access to terminal reading"""
+        return self.process_manager.read_terminal(only_selected)
+
+    def insert_content(self, path: str, insert_line: int, new_content: str) -> Dict[str, Any]:
+        """Direct access to content insertion"""
+        return self.file_manager.insert_content(path, insert_line, new_content)
+
+    # Enhanced file operations
+    def view_file(self, path: str, view_range: Optional[List[int]] = None,
+                  search_query_regex: Optional[str] = None, **kwargs) -> Dict[str, Any]:
+        """Enhanced file viewing with advanced features"""
+        return self.file_manager.view_file_advanced(path, view_range, search_query_regex, **kwargs)
+
+def main():
+    """Main entry point"""
+    import argparse
+
+    parser = argparse.ArgumentParser(description='Augment Agent Replica - Comprehensive AI Assistant')
+    parser.add_argument('--workspace', '-w', default=None, help='Workspace root directory')
+    parser.add_argument('--command', '-c', help='Single command to execute')
+    parser.add_argument('--file', '-f', help='Execute commands from file')
+    parser.add_argument('--version', action='version', version='Augment Agent Replica 1.0')
+
+    args = parser.parse_args()
+
+    try:
+        # Initialize agent
+        workspace = args.workspace or os.getcwd()
+        agent = AugmentAgent(workspace)
+
+        if args.command:
+            # Execute single command
+            response = agent.process_command(args.command)
+            print(response)
+        elif args.file:
+            # Execute commands from file
+            with open(args.file, 'r') as f:
+                commands = f.read().strip().split('\n')
+
+            for cmd in commands:
+                if cmd.strip():
+                    print(f"Executing: {cmd}")
+                    response = agent.process_command(cmd)
+                    print(f"Response: {response}\n")
+        else:
+            # Interactive mode
+            agent.run_interactive()
+
+    except KeyboardInterrupt:
+        print("\nExiting...")
+    except Exception as e:
+        logger.error(f"Fatal error: {e}")
+        print(f"Fatal error: {e}")
+        sys.exit(1)
+
+# Example usage and testing functions
+def example_usage():
+    """Demonstrate key capabilities"""
+    print("🚀 Augment Agent Replica - Example Usage\n")
+
+    # Initialize agent
+    agent = AugmentAgent()
+
+    # File operations
+    print("1. File Operations:")
+    result = agent.save_file("test_file.py", "print('Hello from Augment Agent!')")
+    print(f"   Save file: {result}")
+
+    result = agent.view_file("test_file.py")
+    print(f"   View file: {result.get('content', 'Error')[:50]}...")
+
+    # Code analysis
+    print("\n2. Code Analysis:")
+    result = agent.file_manager.analyze_code("test_file.py")
+    print(f"   Analysis: {result}")
+
+    # Task management
+    print("\n3. Task Management:")
+    tasks = [
+        {"name": "Setup project", "description": "Initialize the project structure"},
+        {"name": "Write tests", "description": "Create comprehensive test suite"}
+    ]
+    result = agent.add_tasks(tasks)
+    print(f"   Add tasks: {result}")
+    print(f"   Task list:\n{agent.view_tasklist()}")
+
+    # Memory system
+    print("\n4. Memory System:")
+    result = agent.remember("This is a test project using Python", ["python", "test"])
+    print(f"   Remember: {result}")
+
+    memories = agent.search_memories("python")
+    print(f"   Search memories: {len(memories)} found")
+
+    # Web capabilities (if configured)
+    print("\n5. Web Capabilities:")
+    if os.getenv('GOOGLE_SEARCH_API_KEY'):
+        results = agent.web_search("Python best practices", 2)
+        print(f"   Web search: {len(results)} results")
+    else:
+        print("   Web search: API not configured")
+
+    # Process management
+    print("\n6. Process Management:")
+    result = agent.launch_process("echo 'Hello from process'", wait=True, max_wait_seconds=5)
+    print(f"   Process output: {result.get('output', 'Error')}")
+
+    # Clean up
+    agent.file_manager.remove_files(["test_file.py"])
+    print("\n✅ Example completed successfully!")
+
+if __name__ == "__main__":
+    # Check if running as example
+    if len(sys.argv) > 1 and sys.argv[1] == "--example":
+        example_usage()
+    else:
+        main()
+    
